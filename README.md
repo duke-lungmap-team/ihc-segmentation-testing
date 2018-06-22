@@ -1,2 +1,2 @@
 # ihc-segmentation-testing
-Comparison of segmentation routines for LungMap images
+Comparison of automated segmentation routines for LungMap images
