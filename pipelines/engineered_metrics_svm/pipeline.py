@@ -287,7 +287,7 @@ class SVMPipeline(Pipeline):
             final_contours.append(
                 {
                     'contour': c,
-                    'prob': [{a: probabilities[0][i]} for i, a in enumerate(model_classes)]
+                    'prob': {a: probabilities[0][i] for i, a in enumerate(model_classes)}
                 }
             )
 
