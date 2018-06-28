@@ -49,6 +49,7 @@ def get_training_data_for_image_set(image_set_dir):
 
 
 def compute_bbox(contour):
+    # noinspection PyUnresolvedReferences
     x1, y1, w, h = cv2.boundingRect(contour)
 
     return [x1, y1, x1 + w, y1 + h]
@@ -75,6 +76,7 @@ def do_boxes_overlap(box1, box2):
 
 def make_boolean_mask(contour, img_dims):
     mask = np.zeros(img_dims, dtype=np.uint8)
+    # noinspection PyUnresolvedReferences
     cv2.drawContours(
         mask,
         [contour],
