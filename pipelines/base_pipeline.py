@@ -1,4 +1,4 @@
-from .common_utils.utils import get_training_data_for_image_set
+from .common_utils.utils import get_training_data_for_image_set, find_overlapping_regions
 import abc
 
 
@@ -16,3 +16,9 @@ class Pipeline(object):
     @abc.abstractmethod
     def test(self):
         pass
+
+    def report(self):
+        return find_overlapping_regions(
+            self.training_data[self.test_img],
+            self.test_results
+        )
