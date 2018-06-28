@@ -73,6 +73,20 @@ def do_boxes_overlap(box1, box2):
     return True
 
 
+def make_boolean_mask(contour, img_dims):
+    mask = np.zeros(img_dims, dtype=np.uint8)
+    cv2.drawContours(
+        mask,
+        [contour],
+        0,
+        255,
+        cv2.FILLED
+    )
+
+    # return boolean array
+    return mask > 0
+
+
 def find_overlapping_regions(true_regions, test_regions):
     true_boxes = []
     true_classes = []
@@ -121,24 +135,10 @@ def find_overlapping_regions(true_regions, test_regions):
             # we'll need to check the contours' pixels
             if true_mask is None:
                 # we've never tested against this contour yet, so render it
-                true_mask = np.zeros(img_dims, dtype=np.uint8)
-                cv2.drawContours(
-                    true_mask,
-                    [true_regions['regions'][i]['points']],
-                    0,
-                    255,
-                    cv2.FILLED
-                )
+                true_mask = make_boolean_mask([true_regions['regions'][i]['points']], img_dims)
 
-                # convert to boolean array
-                true_mask = true_mask > 0
-
-            # and render the test box
-            test_mask = np.zeros(img_dims, dtype=np.uint8)
-            cv2.drawContours(test_mask, [test_regions[j]['contour']], 0, 255, cv2.FILLED)
-
-            # convert to boolean array
-            test_mask = test_mask > 0
+            # and render the test contour
+            test_mask = make_boolean_mask(test_regions[j]['contour'], img_dims)
 
             intersect_mask = np.bitwise_and(true_mask, test_mask)
             intersect_area = intersect_mask.sum()
