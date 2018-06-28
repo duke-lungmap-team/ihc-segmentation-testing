@@ -137,7 +137,7 @@ def find_overlapping_regions(true_regions, test_regions):
             # we'll need to check the contours' pixels
             if true_mask is None:
                 # we've never tested against this contour yet, so render it
-                true_mask = make_boolean_mask([true_regions['regions'][i]['points']], img_dims)
+                true_mask = make_boolean_mask(true_regions['regions'][i]['points'], img_dims)
 
             # and render the test contour
             test_mask = make_boolean_mask(test_regions[j]['contour'], img_dims)
