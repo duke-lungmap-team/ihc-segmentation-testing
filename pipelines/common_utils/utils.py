@@ -46,3 +46,132 @@ def get_training_data_for_image_set(image_set_dir):
             )
 
     return training_data
+
+
+def compute_bbox(contour):
+    x1, y1, w, h = cv2.boundingRect(contour)
+
+    return [x1, y1, x1 + w, y1 + h]
+
+
+def do_boxes_overlap(box1, box2):
+    # if the maximum of both boxes left corner is greater than the
+    # minimum of both boxes right corner, the boxes cannot overlap
+    max_x_left = max([box1[0], box2[0]])
+    min_x_right = min([box1[2], box2[2]])
+
+    if min_x_right < max_x_left:
+        return False
+
+    # Likewise for the y-coordinates
+    max_y_top = max([box1[1], box2[1]])
+    min_y_bottom = min([box1[3], box2[3]])
+
+    if min_y_bottom < max_y_top:
+        return False
+
+    return True
+
+
+def find_overlapping_regions(true_regions, test_regions):
+    true_boxes = []
+    true_classes = []
+    test_boxes = []
+    test_classes = []
+    test_scores = []
+
+    img_dims = true_regions['hsv_img'].shape[:2]
+
+    for r in true_regions['regions']:
+        true_boxes.append(compute_bbox(r['points']))
+        true_classes.append(r['label'])
+
+    for r in test_regions:
+        test_boxes.append(compute_bbox(r['contour']))
+
+        max_prob = max(r['prob'].items(), key=itemgetter(1))
+
+        test_classes.append(max_prob[0])
+        test_scores.append(max_prob[1])
+
+    # now we are ready to find the overlaps, we'll keep track of them with a dictionary
+    # where the keys are the true region's index. The values will be a dictionary of
+    # overlapping test regions, organized into 2 groups:
+    #   - matching overlaps: overlaps where the test & true region labels agree
+    #   - non-matching overlaps: overlaps where the test & true region labels differ
+    #
+    # Each one of those groups will be keys with a value of another list of dictionaries,
+    # with the overlapping test region index along with the IoU value.
+    # There are 2 other cases to cover:
+    #   - true regions with no matching overlaps (i.e. missed regions)
+    #   - test regions with no matching overlaps (i.e. false positives)
+    true_overlaps = {}
+    true_match_set = set()
+    test_match_set = set()
+
+    for i, r1 in enumerate(true_boxes):
+        true_mask = None  # reset to None, will compute as needed
+
+        for j, r2 in enumerate(test_boxes):
+            if not do_boxes_overlap(r1, r2):
+                continue
+
+            # So you're saying there's a chance?
+            # If we get here, there is a chance for an overlap but it is not guaranteed,
+            # we'll need to check the contours' pixels
+            if true_mask is None:
+                # we've never tested against this contour yet, so render it
+                true_mask = np.zeros(img_dims, dtype=np.uint8)
+                cv2.drawContours(
+                    true_mask,
+                    [true_regions['regions'][i]['points']],
+                    0,
+                    255,
+                    cv2.FILLED
+                )
+
+                # convert to boolean array
+                true_mask = true_mask > 0
+
+            # and render the test box
+            test_mask = np.zeros(img_dims, dtype=np.uint8)
+            cv2.drawContours(test_mask, [test_regions[j]['contour']], 0, 255, cv2.FILLED)
+
+            # convert to boolean array
+            test_mask = test_mask > 0
+
+            intersect_mask = np.bitwise_and(true_mask, test_mask)
+            intersect_area = intersect_mask.sum()
+
+            if not intersect_area > 0:
+                # the bounding boxes overlapped, but the contours didn't, skip it
+                continue
+
+            union_mask = np.bitwise_or(true_mask, test_mask)
+            true_match_set.add(i)
+            test_match_set.add(j)
+
+            if i not in true_overlaps:
+                true_overlaps[i] = {
+                    'true': [],
+                    'false': []
+                }
+
+            test_result = {
+                'test_index': j,
+                'iou': intersect_area / union_mask.sum()
+            }
+
+            if true_classes[i] == test_classes[j]:
+                true_overlaps[i]['true'].append(test_result)
+            else:
+                true_overlaps[i]['false'].append(test_result)
+
+    missed_regions = true_match_set.symmetric_difference((range(0, len(true_boxes))))
+    false_positives = test_match_set.symmetric_difference((range(0, len(test_boxes))))
+
+    return {
+        'true_overlaps': true_overlaps,
+        'missed_regions': missed_regions,
+        'false_positives': false_positives
+    }
