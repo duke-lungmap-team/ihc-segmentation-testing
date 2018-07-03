@@ -1,6 +1,5 @@
 opencv-python
-cv2
 numpy
-LungMapUtils
-PIL
+git+git://github.com/duke-lungmap-team/lung-map-utils.git
+Pillow
 pandas
