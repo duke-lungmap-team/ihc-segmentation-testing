@@ -21,7 +21,7 @@ class SVMPipeline(Pipeline):
         training_data_processed = []
 
         for img_name, img_data in self.training_data.items():
-            if img_name == self.test_img:
+            if img_name == self.test_img_name:
                 continue
             for region in img_data['regions']:
                 training_data_processed.append(
@@ -43,7 +43,7 @@ class SVMPipeline(Pipeline):
         color_blur_kernel = (27, 27)
         large_blur_kernel = (91, 91)
 
-        img = self.training_data[self.test_img]['hsv_img']
+        img = self.training_data[self.test_img_name]['hsv_img']
 
         # color threshold candidates
         img_blur_c = cv2.GaussianBlur(
