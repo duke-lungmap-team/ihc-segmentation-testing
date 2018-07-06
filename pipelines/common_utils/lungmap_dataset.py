@@ -25,10 +25,8 @@ class LungmapDataSet(DataSet):
                 polygons=img_data['regions']
             )
             for region in img_data['regions']:
-                try:
-                    anatomy.add(region['label'])
-                except:
-                    print(pt)
+                anatomy.add(region['label'])
+
         anatomy = list(anatomy)  # TODO: should this be sorted to ensure order?
         for i, a in enumerate(anatomy):
             self.add_class("lungmap", i+1, a)
