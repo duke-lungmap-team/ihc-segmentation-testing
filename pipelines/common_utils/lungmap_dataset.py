@@ -18,6 +18,7 @@ class LungmapDataSet(DataSet):
 
         for img_name, img_data in data_set.items():
             self.add_image(
+                "lungmap",
                 image_id=img_name,  # use file name as a unique image id
                 img=cv2.cvtColor(img_data['hsv_img'], cv2.COLOR_HSV2RGB),
                 width=img_data['hsv_img'].shape[0],

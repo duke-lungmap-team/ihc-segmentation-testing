@@ -33,7 +33,7 @@ inference_config = InferenceConfig()
 
 
 class MrCNNPipeline(Pipeline):
-    def __init__(self, image_set_dir, model_dir, test_img_index=0):
+    def __init__(self, image_set_dir, model_dir='tmp/models', test_img_index=0):
         super(MrCNNPipeline, self).__init__(image_set_dir, test_img_index)
 
         # TODO: make sure there are enough images in the image set, as this pipeline
