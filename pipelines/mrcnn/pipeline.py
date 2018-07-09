@@ -25,15 +25,8 @@ class LungMapTrainingConfig(Config):
 config = LungMapTrainingConfig()
 
 
-class InferenceConfig(Config):
-    GPU_COUNT = 1
-    IMAGES_PER_GPU = 1
-
-inference_config = InferenceConfig()
-
-
 class MrCNNPipeline(Pipeline):
-    def __init__(self, image_set_dir, model_dir='tmp/models', test_img_index=0):
+    def __init__(self, image_set_dir, model_dir='tmp/models/maskrcnn', test_img_index=0):
         super(MrCNNPipeline, self).__init__(image_set_dir, test_img_index)
 
         # TODO: make sure there are enough images in the image set, as this pipeline
@@ -95,11 +88,10 @@ class MrCNNPipeline(Pipeline):
         )
 
     def test(self):
-        # TODO: check which color space model.detect needs & convert as needed
-        img = self.training_data[self.test_img_name]['hsv_img']
+        img = self.dataset_test.image_info[0]['img']
         model = modellib.MaskRCNN(
             mode="inference",
-            config=inference_config,
+            config=config,
             model_dir=self.model_dir
         )
         model.load_weights(
