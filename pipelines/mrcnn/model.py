@@ -2088,7 +2088,10 @@ class MaskRCNN():
         exclude: list of layer names to exclude
         """
         import h5py
-        from keras.engine import topology
+        try:
+            from keras.engine.saving import load_weights_from_hdf5_group, load_weights_from_hdf5_group_by_name
+        except:
+            from keras.engine.topology import load_weights_from_hdf5_group, load_weights_from_hdf5_group_by_name
 
         if exclude:
             by_name = True
@@ -2110,9 +2113,9 @@ class MaskRCNN():
             layers = filter(lambda l: l.name not in exclude, layers)
 
         if by_name:
-            topology.load_weights_from_hdf5_group_by_name(f, layers)
+            load_weights_from_hdf5_group_by_name(f, layers)
         else:
-            topology.load_weights_from_hdf5_group(f, layers)
+            load_weights_from_hdf5_group(f, layers)
         if hasattr(f, 'close'):
             f.close()
 
