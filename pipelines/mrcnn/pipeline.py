@@ -2,6 +2,7 @@ from pipelines.base_pipeline import Pipeline
 from pipelines.mrcnn import model as modellib
 from pipelines.mrcnn.config import Config
 from pipelines.common_utils.lungmap_dataset import LungmapDataSet
+import os
 
 
 class LungMapTrainingConfig(Config):
@@ -9,7 +10,7 @@ class LungMapTrainingConfig(Config):
     Configuration for training
     """
     IMAGES_PER_GPU = 1
-    STEPS_PER_EPOCH = 2
+    STEPS_PER_EPOCH = 50
     # Number of classification classes (including background)
     # TODO: update this to be automatic
     NUM_CLASSES = 6  # Override in sub-classes
@@ -19,6 +20,7 @@ class LungMapTrainingConfig(Config):
     TRAIN_ROIS_PER_IMAGE = 256
     MAX_GT_INSTANCES = 24
     DETECTION_MAX_INSTANCES = 100
+
 
 config = LungMapTrainingConfig()
 
@@ -31,12 +33,12 @@ inference_config = InferenceConfig()
 
 
 class MrCNNPipeline(Pipeline):
-    def __init__(self, image_set_dir, test_img_index=0):
+    def __init__(self, image_set_dir, model_dir, test_img_index=0):
         super(MrCNNPipeline, self).__init__(image_set_dir, test_img_index)
 
         # TODO: make sure there are enough images in the image set, as this pipeline
         # needs to separate an image for validation, in addition to the reserved test image.
-
+        self.model_dir = model_dir
         training_data = self.training_data.copy()
         test_data = {}
         validation_data = {}
@@ -59,7 +61,7 @@ class MrCNNPipeline(Pipeline):
         self.model = modellib.MaskRCNN(
             mode="training",
             config=config,
-            model_dir='tmp/models'
+            model_dir=self.model_dir
         )
 
     def train(self):
@@ -94,7 +96,7 @@ class MrCNNPipeline(Pipeline):
         model = modellib.MaskRCNN(
             mode="inference",
             config=inference_config,
-            model_dir='models'
+            model_dir=self.model_dir
         )
-        model.load_weights('models')
+        model.load_weights(os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5'))
         return model.detect([img], verbose=1)
