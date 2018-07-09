@@ -60,7 +60,6 @@ class LungmapDataSet(DataSet):
             y = p['points'][:, 1]
             x = p['points'][:, 0]
             rr, cc = skimage.draw.polygon(y, x)
-            print(i)
             mask[rr, cc, i] = 1
             y1, y2, x1, x2 = self.bbox2(mask[:, :, i])
             b_boxes.append([y1, x1, y2, x2])
