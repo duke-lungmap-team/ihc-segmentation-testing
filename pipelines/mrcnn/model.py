@@ -1299,8 +1299,8 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Different data sets have different classes, so track the
     # classes supported in the data set of this image.
     active_class_ids = np.zeros([dataset.num_classes], dtype=np.int32)
-    # source_class_ids = dataset.source_class_ids[dataset.image_info[image_id]["source"]]
-    # active_class_ids[source_class_ids] = 1
+    source_class_ids = dataset.source_class_ids[dataset.image_info[image_id]["source"]]
+    active_class_ids[source_class_ids] = 1
 
     # Resize masks to smaller size to reduce memory usage
     if use_mini_mask:
@@ -2088,7 +2088,10 @@ class MaskRCNN():
         exclude: list of layer names to exclude
         """
         import h5py
-        from keras.engine import topology
+        try:
+            from keras.engine.saving import load_weights_from_hdf5_group, load_weights_from_hdf5_group_by_name
+        except:
+            from keras.engine.topology import load_weights_from_hdf5_group, load_weights_from_hdf5_group_by_name
 
         if exclude:
             by_name = True
@@ -2110,9 +2113,9 @@ class MaskRCNN():
             layers = filter(lambda l: l.name not in exclude, layers)
 
         if by_name:
-            topology.load_weights_from_hdf5_group_by_name(f, layers)
+            load_weights_from_hdf5_group_by_name(f, layers)
         else:
-            topology.load_weights_from_hdf5_group(f, layers)
+            load_weights_from_hdf5_group(f, layers)
         if hasattr(f, 'close'):
             f.close()
 

@@ -18,6 +18,7 @@ class LungmapDataSet(DataSet):
 
         for img_name, img_data in data_set.items():
             self.add_image(
+                "lungmap",
                 image_id=img_name,  # use file name as a unique image id
                 img=cv2.cvtColor(img_data['hsv_img'], cv2.COLOR_HSV2RGB),
                 width=img_data['hsv_img'].shape[0],
@@ -60,7 +61,6 @@ class LungmapDataSet(DataSet):
             y = p['points'][:, 1]
             x = p['points'][:, 0]
             rr, cc = skimage.draw.polygon(y, x)
-            print(i)
             mask[rr, cc, i] = 1
             y1, y2, x1, x2 = self.bbox2(mask[:, :, i])
             b_boxes.append([y1, x1, y2, x2])
