@@ -64,17 +64,21 @@ class MrCNNPipeline(Pipeline):
             model_dir=self.model_dir
         )
 
-    def train(self):
-        # self.model.load_weights(
-        #     'tmp/models',
-        #     by_name=True,
-        #     exclude=[
-        #         "mrcnn_class_logits",
-        #         "mrcnn_bbox_fc",
-        #         "mrcnn_bbox",
-        #         "mrcnn_mask"
-        #     ]
-        # )
+    def train(self, coco_model_weights):
+        """
+        Method to train new algorithm
+        :param coco_model_weights: required is the pretrained h5 file which contains the coco trained model weights
+        :return:
+        """
+        self.model.load_weights(
+            coco_model_weights,
+            by_name=True,
+            exclude=[
+                "mrcnn_class_logits",
+                "mrcnn_bbox_fc",
+                "mrcnn_bbox",
+                "mrcnn_mask"
+        ])
         self.model.train(
             self.dataset_train,
             self.dataset_validation,
@@ -98,5 +102,7 @@ class MrCNNPipeline(Pipeline):
             config=inference_config,
             model_dir=self.model_dir
         )
-        model.load_weights(os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5'))
+        model.load_weights(
+            os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5')
+        )
         return model.detect([img], verbose=1)
