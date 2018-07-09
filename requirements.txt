@@ -1,9 +1,10 @@
-h5py
 opencv-python
 numpy
 git+git://github.com/duke-lungmap-team/lung-map-utils.git
+git+git://github.com/duke-lungmap-team/lung-map-utils-extra.git
 Pillow
 pandas
 tensorflow
 keras
+matplotlib
 scikit-image
