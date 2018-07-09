@@ -1,6 +1,4 @@
 import numpy as np
-import skimage.io
-import skimage.color
 
 class DataSet(object):
     """The base class for dataset classes.
