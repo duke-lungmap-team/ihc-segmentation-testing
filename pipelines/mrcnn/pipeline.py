@@ -103,6 +103,13 @@ class MrCNNPipeline(Pipeline):
             model_dir=self.model_dir
         )
         model.load_weights(
-            os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5')
+            os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5'),
+            by_name=True,
+            exclude=[
+                "mrcnn_class_logits",
+                "mrcnn_bbox_fc",
+                "mrcnn_bbox",
+                "mrcnn_mask"
+            ]
         )
         return model.detect([img], verbose=1)
