@@ -21,6 +21,7 @@ for (ff, name, is_pkg) in pkgutil.iter_modules(['pipelines']):
 
 # get list of image sets
 image_set_dirs = os.listdir('data')
+image_set_dirs = [x for x in image_set_dirs if not x.startswith('.')]
 
 # make our 'tmp' directory for caching trained & tested pipeline instances
 if not os.path.isdir('tmp'):
