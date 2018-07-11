@@ -2,8 +2,12 @@ from pipelines.base_pipeline import Pipeline
 from pipelines.mrcnn import model as modellib
 from pipelines.mrcnn.config import Config
 from pipelines.common_utils.lungmap_dataset import LungmapDataSet
+from pipelines.common_utils.utils import put_file_to_remote, get_file_from_remote
 import os
+import logging
 
+FORMAT = '%(asctime)-15s %(message)s'
+logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 
 class LungMapTrainingConfig(Config):
     """
@@ -57,12 +61,21 @@ class MrCNNPipeline(Pipeline):
             model_dir=self.model_dir
         )
 
-    def train(self, coco_model_weights):
+    def train(self, coco_model_weights='tmp/models/mrcnn/mask_rcnn_coco.h5'):
         """
         Method to train new algorithm
         :param coco_model_weights: required is the pretrained h5 file which contains the coco trained model weights
         :return:
         """
+        if not os.path.exists(coco_model_weights):
+            logging.info(
+                'Could not find pre-trained weights maks_rcnn_coco_h5 in tmp/models/mrcnn, caching now.'
+            )
+            get_file_from_remote('mrcnn', 'mask_rcnn_coco.h5')
+            logging.info(
+                'weights now cached: tmp/models/mrcnn/mask_rcnn_coco.h5'
+            )
+
         self.model.load_weights(
             coco_model_weights,
             by_name=True,
@@ -87,7 +100,15 @@ class MrCNNPipeline(Pipeline):
             layers="all"
         )
 
-    def test(self):
+    def test(self, model_weights='tmp/models/mrcnn/mask_rcnn_lungmap_0002.h5'):
+        if not os.path.exists(model_weights):
+            logging.info(
+                'Could not find pre-trained weights mask_rcnn_lungmap_0002.h5 in tmp/models/mrcnn, caching now.'
+            )
+            get_file_from_remote('mrcnn', 'mask_rcnn_lungmap_0002.h5')
+            logging.info(
+                'weights now cached: tmp/models/mrcnn/mask_rcnn_lungmap_0002.h5'
+            )
         img = self.dataset_test.image_info[0]['img']
         model = modellib.MaskRCNN(
             mode="inference",
