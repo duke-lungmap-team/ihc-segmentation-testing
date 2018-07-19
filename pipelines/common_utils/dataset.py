@@ -1,11 +1,13 @@
 import numpy as np
 
+
 class DataSet(object):
-    """The base class for dataset classes.
-    To use it, create a new class that adds functions specific to the dataset
+    """
+    The base class for data set classes.
+    To use it, create a new class that adds functions specific to the data set
     you want to use. For example:
 
-    class CatsAndDogsDataset(Dataset):
+    class CatsAndDogsDataSet(DataSet):
         def load_cats_and_dogs(self):
             ...
         def load_mask(self, image_id):
@@ -14,7 +16,7 @@ class DataSet(object):
             ...
     """
 
-    def __init__(self, class_map=None):
+    def __init__(self):
         self._image_ids = []
         self.image_info = []
         # Background is always the first class
@@ -44,19 +46,21 @@ class DataSet(object):
         self.image_info.append(image_info)
 
     def image_reference(self, image_id):
-        """Return a link to the image in its source Website or details about
+        """
+        Return a link to the image in its source Website or details about
         the image that help looking it up or debugging it.
 
-        Override for your dataset, but pass to this function
-        if you encounter images not in your dataset.
+        Override for your data set, but pass to this function
+        if you encounter images not in your data set.
         """
         return ""
 
     def prepare(self, class_map=None):
-        """Prepares the Dataset class for use.
+        """
+        Prepares the DataSet class for use.
 
         TODO: class map is not supported yet. When done, it should handle mapping
-              classes from different datasets to the same class ID.
+              classes from different data sets to the same class ID.
         """
 
         def clean_name(name):
@@ -79,17 +83,18 @@ class DataSet(object):
         # Map sources to class_ids they support
         self.sources = list(set([i['source'] for i in self.class_info]))
         self.source_class_ids = {}
-        # Loop over datasets
+        # Loop over data sets
         for source in self.sources:
             self.source_class_ids[source] = []
-            # Find classes that belong to this dataset
+            # Find classes that belong to this data set
             for i, info in enumerate(self.class_info):
-                # Include BG class in all datasets
+                # Include BG class in all data sets
                 if i == 0 or source == info['source']:
                     self.source_class_ids[source].append(i)
 
     def map_source_class_id(self, source_class_id):
-        """Takes a source class ID and returns the int class ID assigned to it.
+        """
+        Takes a source class ID and returns the int class ID assigned to it.
 
         For example:
         dataset.map_source_class_id("coco.12") -> 23
@@ -97,7 +102,7 @@ class DataSet(object):
         return self.class_from_source_map[source_class_id]
 
     def get_source_class_id(self, class_id, source):
-        """Map an internal class ID to the corresponding class ID in the source dataset."""
+        """Map an internal class ID to the corresponding class ID in the source data set"""
         info = self.class_info[class_id]
         assert info['source'] == source
         return info['id']
@@ -118,8 +123,9 @@ class DataSet(object):
         return self._image_ids
 
     def source_image_link(self, image_id):
-        """Returns the path or URL to the image.
-        Override this to return a URL to the image if it's availble online for easy
+        """
+        Returns the path or URL to the image.
+        Override this to return a URL to the image if it's available online for easy
         debugging.
         """
         return self.image_info[image_id]["path"]
@@ -131,9 +137,10 @@ class DataSet(object):
         return self.image_info[image_id]['img']
 
     def load_mask(self, image_id):
-        """Load instance masks for the given image.
+        """
+        Load instance masks for the given image.
 
-        Different datasets use different ways to store masks. Override this
+        Different data sets use different ways to store masks. Override this
         method to load instance masks and return them in the form of am
         array of binary masks of shape [height, width, instances].
 
@@ -142,7 +149,7 @@ class DataSet(object):
                 a binary mask per instance.
             class_ids: a 1D array of class IDs of the instance masks.
         """
-        # Override this function to load a mask from your dataset.
+        # Override this function to load a mask from your data set.
         # Otherwise, it returns an empty mask.
         mask = np.empty([0, 0, 0])
         class_ids = np.empty([0], np.int32)
