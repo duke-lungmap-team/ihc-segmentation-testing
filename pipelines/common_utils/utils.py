@@ -1,5 +1,4 @@
 import json
-import os
 import PIL
 import numpy as np
 import cv2
@@ -225,13 +224,8 @@ def put_file_to_remote(model_name, file):
     ftp_client.close()
     c.close()
 
-def get_file_from_remote(model_name, file_name):
-    """
 
-    :param remote_unc_file_path: str: remote location of file to get
-    :param local_unc_file_path: str: local location of file to save
-    :return:
-    """
+def get_file_from_remote(model_name, file_name):
     k = paramiko.RSAKey.from_private_key_file(
         os.getenv('pem_file')
     )
@@ -259,4 +253,3 @@ def get_file_from_remote(model_name, file_name):
     ftp_client.get(remote_file_path, local_file_path)
     ftp_client.close()
     c.close()
-
