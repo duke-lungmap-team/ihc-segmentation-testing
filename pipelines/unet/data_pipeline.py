@@ -50,7 +50,7 @@ def get_generator(images_resize, masks_resize):
     generator = zip(image_generator, mask_generator)
     return generator
 
-def unet_generators(dataset, input_shape=(572, 572, 3), output_shape=(570, 570, 5)):
+def unet_generators(dataset, input_shape=(572, 572, 3), output_shape=(560, 560, 5)):
     imgs_train, masks_train, class_names = obtain_data_from_dataset(dataset, input_shape, output_shape)
     return get_generator(imgs_train, masks_train), class_names
 
