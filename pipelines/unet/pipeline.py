@@ -45,6 +45,7 @@ class LungmapUnetPipeline(Pipeline):
         self.model.fit_generator(
             self.train_generator,
             validation_data = self.val_generator,
+            validation_steps=5,
             steps_per_epoch=30,
             epochs=epochparam,
             callbacks=[model_checkpoint],
