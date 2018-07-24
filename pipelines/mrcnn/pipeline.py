@@ -16,7 +16,7 @@ class LungMapTrainingConfig(Config):
     Configuration for training
     """
     IMAGES_PER_GPU = 1
-    STEPS_PER_EPOCH = 500
+    STEPS_PER_EPOCH = 50
     # Number of classification classes (including background)
     # TODO: update this to be automatic
     NUM_CLASSES = 6  # Override in sub-classes
@@ -25,7 +25,7 @@ class LungMapTrainingConfig(Config):
     USE_MINI_MASK = False
     TRAIN_ROIS_PER_IMAGE = 512
     MAX_GT_INSTANCES = 160
-    DETECTION_MAX_INSTANCES = 150
+    DETECTION_MAX_INSTANCES = 160
     DETECTION_MIN_CONFIDENCE = 0.2
 
 
