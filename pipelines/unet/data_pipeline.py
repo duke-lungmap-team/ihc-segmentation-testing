@@ -2,7 +2,7 @@ from keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 import scipy
 
-def obtain_data_from_dataset(dataset, input_shape, output_shape):
+def obtain_data_from_dataset(dataset, input_shape, output_shape, classes):
     imgs, masks = dataset.load_all_data_into_memory()
     assert masks.shape[3]==output_shape[2]
     new_image_shape = input_shape
@@ -15,6 +15,11 @@ def obtain_data_from_dataset(dataset, input_shape, output_shape):
     for idx in range(masks_resize.shape[0]):
         for class_idx in range(masks_resize.shape[3]):
             masks_resize[idx,:,:,class_idx] = scipy.misc.imresize(masks[idx,:,:,class_idx], new_shape)
+    new_class_names = dataset.class_names[1:]
+    if len(classes)>0:
+        indx = [i for i, x in enumerate(dataset.class_names[1:]) if x in classes]
+        new_class_names = [x for i, x in enumerate(dataset.class_names[1:]) if i in indx]
+        masks_resize = masks_resize[:,:,:,indx]
     return images_resize, masks_resize, dataset.class_names[1:]
 
 
@@ -50,8 +55,8 @@ def get_generator(images_resize, masks_resize):
     generator = zip(image_generator, mask_generator)
     return generator
 
-def unet_generators(dataset, input_shape=(572, 572, 3), output_shape=(560, 560, 5)):
-    imgs_train, masks_train, class_names = obtain_data_from_dataset(dataset, input_shape, output_shape)
+def unet_generators(dataset, classes, input_shape=(1024, 1024, 3), output_shape=(1024, 1024, 5)):
+    imgs_train, masks_train, class_names = obtain_data_from_dataset(dataset, input_shape, output_shape, classes)
     return get_generator(imgs_train, masks_train), class_names
 
 

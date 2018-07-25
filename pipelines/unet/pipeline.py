@@ -5,9 +5,23 @@ from pipelines.unet.data_pipeline import unet_generators
 from keras.callbacks import ModelCheckpoint
 import os
 from keras.models import load_model
+import scipy
+import numpy as np
+import matplotlib.pyplot as plt
 
 class LungmapUnetPipeline(Pipeline):
-    def __init__(self, image_set_dir, model_dir='tmp/models/unet', test_img_index=0):
+    def __init__(self,
+                 image_set_dir,
+                 model_dir='tmp/models/unet',
+                 test_img_index=0,
+                 input_shape=(1024, 1024, 3),
+                 output_shape=(1024, 1024, 5),
+                 classes = ['distal acinar tubule bud',
+                            'bronchiole',
+                            'respiratory system blood vessel',
+                            'bronchial artery',
+                            'proximal acinar tubule']
+                 ):
         super(LungmapUnetPipeline, self).__init__(image_set_dir, test_img_index)
 
         # TODO: make sure there are enough images in the image set, as this pipeline
@@ -32,8 +46,18 @@ class LungmapUnetPipeline(Pipeline):
         self.dataset_test.load_data_set(test_data)
         self.dataset_test.prepare()
 
-        self.train_generator, self.class_names = unet_generators(self.dataset_train)
-        self.val_generator, _ = unet_generators(self.dataset_validation)
+        self.train_generator, self.class_names = unet_generators(
+            self.dataset_train,
+            classes,
+            input_shape,
+            output_shape,
+        )
+        self.val_generator, _ = unet_generators(
+            self.dataset_validation,
+            classes,
+            input_shape,
+            output_shape
+        )
         self.model = unet_padded(len(self.class_names))
 
     def train(self, epochparam=5):
@@ -50,9 +74,23 @@ class LungmapUnetPipeline(Pipeline):
             epochs=epochparam,
             callbacks=[model_checkpoint],
         )
-    def test(self, image, model_save_dir='models'):
-        self.trained_model = load_model(os.path.join(model_save_dir, 'unet_lungmap.hdf5'))
-        return self.trained_model.predict(image)
+    def test(self):
+        img, m = self.dataset_test.load_all_data_into_memory()
+        print_all_masks(img, m)
+        scaled_image = scipy.misc.imresize(img[0,:,:,:], (572,572,3))
+        expanded_scaled_image = np.expand_dims(scaled_image, axis=0)
+        trained_model = load_model(os.path.join(self.model_dir, 'unet_lungmap.hdf5'))
+        pred = trained_model.predict(expanded_scaled_image)
+        pred_thresh = np.where(pred>0,1,0)
+        print_all_masks(np.expand_dims(scaled_image,axis=0), pred_thresh)
+        return
+
+
+def print_all_masks(i,m):
+    for x in range(m.shape[3]):
+        plt.imshow(i[0,:,:])
+        plt.imshow(m[0,:,:,x], cmap='jet', alpha=0.5)
+        plt.show()
 
 # up = UnetPipeline('/Users/nn31/Documents/ihc-segmentation-testing/data/image_set_73')
 
