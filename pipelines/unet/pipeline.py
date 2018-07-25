@@ -58,7 +58,7 @@ class LungmapUnetPipeline(Pipeline):
             input_shape,
             output_shape
         )
-        self.model = unet_padded(len(self.class_names))
+        self.model = unet_padded(len(classes))
 
     def train(self, epochparam=5):
         model_checkpoint = ModelCheckpoint(

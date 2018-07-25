@@ -109,5 +109,5 @@ def unet_padded(class_num, img_rows=1024, img_cols=1024, channels=3):
 
     model = Model(inputs=inputs, outputs=conv10)
     # try the dice coefficient as well
-    model.compile(optimizer=Adam(lr=1e-4), loss=weighted_categorical_crossentropy, metrics=['accuracy'])
+    model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
     return model
