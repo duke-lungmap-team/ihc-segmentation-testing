@@ -1,11 +1,13 @@
 import json
-import os
+import pandas as pd
 import PIL
 import numpy as np
 import cv2
 from operator import itemgetter
 import os
 import paramiko
+from matplotlib import patches
+import matplotlib.pyplot as plt
 
 
 def get_training_data_for_image_set(image_set_dir):
@@ -225,11 +227,12 @@ def put_file_to_remote(model_name, file):
     ftp_client.close()
     c.close()
 
+
 def get_file_from_remote(model_name, file_name):
     """
 
-    :param remote_unc_file_path: str: remote location of file to get
-    :param local_unc_file_path: str: local location of file to save
+    :param model_name: str: remote location of file to get
+    :param file_name: str: local location of file to save
     :return:
     """
     k = paramiko.RSAKey.from_private_key_file(
@@ -260,3 +263,203 @@ def get_file_from_remote(model_name, file_name):
     ftp_client.close()
     c.close()
 
+
+def calc_reca(tps, fns):
+    eps = np.spacing(1)
+    recall = tps / (tps + fns + eps)
+    return recall
+
+
+def calc_prec(tps, fps):
+    eps = np.spacing(1)
+    precision = tps / (tps + fps + eps)
+    return precision
+
+
+def generate_iou_pred_matricies(true_regions, test_regions):
+    true_boxes = []
+    test_boxes = []
+    img_dims = true_regions['hsv_img'].shape[:2]
+
+    for r in true_regions['regions']:
+        true_boxes.append(compute_bbox(r['points']))
+
+    for r in test_regions:
+        test_boxes.append(compute_bbox(r['contour']))
+
+    iou_mat = np.zeros((len(test_boxes), len(true_boxes)))
+    pred_mat = iou_mat.copy()
+
+    for i, r1 in enumerate(true_boxes):
+        true_mask = None  # reset to None, will compute as needed
+
+        for j, r2 in enumerate(test_boxes):
+            if not do_boxes_overlap(r1, r2):
+                continue
+
+            # So you're saying there's a chance?
+            # If we get here, there is a chance for an overlap but it is not guaranteed,
+            # we'll need to check the contours' pixels
+            if true_mask is None:
+                # we've never tested against this contour yet, so render it
+                true_mask = make_boolean_mask(true_regions['regions'][i]['points'], img_dims)
+
+            # and render the test contour
+            test_mask = make_boolean_mask(test_regions[j]['contour'], img_dims)
+
+            intersect_mask = np.bitwise_and(true_mask, test_mask)
+            intersect_area = intersect_mask.sum()
+
+            if not intersect_area > 0:
+                # the bounding boxes overlapped, but the contours didn't, skip it
+                continue
+
+            union_mask = np.bitwise_or(true_mask, test_mask)
+            iou = intersect_area / union_mask.sum()
+            iou_mat[j, i] = iou
+            types, value = max(test_regions[j]['prob'].items(), key=itemgetter(1))
+            if types == true_regions['regions'][i]['label']:
+                pred_mat[j, i] = value
+    return iou_mat, pred_mat
+
+
+def generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.5, pred_thresh=0.25):
+    tp = {}
+    for i in reversed(list(np.argsort(pred_mat, axis=None))):
+        predind, gtind = np.unravel_index(i, pred_mat.shape)
+        if iou_mat[predind, gtind] > iou_thresh:
+            # TODO optionally only add if the prediction isn't already in tp.values()?
+            if pred_mat[predind, gtind] > pred_thresh:
+                tp[gtind] = predind
+    fn = set(range(iou_mat.shape[1]))-set(tp.keys())
+    fp = set(range(iou_mat.shape[0]))-set(tp.values())
+    return tp, fn, fp
+
+
+def generate_dataframe_aggregation_tp_fn_fp(
+        true_regions,
+        test_regions,
+        iou_mat,
+        pred_mat,
+        tp,
+        fn,
+        fp):
+    class_names = set()
+    for x in true_regions['regions']:
+        class_names.add(x['label'])
+    for x in test_regions:
+        type, value = max(x['prob'].items(), key=itemgetter(1))
+        class_names.add(type)
+    results = {k: {'tp': [], 'fp': [], 'fn': []} for k in class_names}
+    df = pd.DataFrame({'category': list(class_names)})
+    df['TP'] = [0 for x in list(class_names)]
+    df['FP'] = [0 for x in list(class_names)]
+    df['FN'] = [0 for x in list(class_names)]
+    df['GTc'] = [0 for x in list(class_names)]
+    for x in true_regions['regions']:
+        c = x['label']
+        mask = (df['category'] == c)
+        df.loc[mask, 'GTc'] = df.loc[mask, 'GTc'] + 1
+    for x in tp.items():
+        save = {}
+        save['iou'] = iou_mat[x[1], x[0]]
+        save['prob'] = iou_mat[x[1], x[0]]
+        save['test_ind'] = x[1]
+        c = true_regions['regions'][x[0]]['label']
+        results[c]['tp'].append(save)
+        results[c]['tp'].append({'gt_ind': x[0]})
+        mask = (df['category'] == c)
+        df.loc[mask, 'TP'] = df.loc[mask, 'TP'] + 1
+    for x in fn:
+        c = true_regions['regions'][x]['label']
+        results[c]['fn'].append({'gt_ind': x})
+        mask = (df['category'] == c)
+        df.loc[mask, 'FN'] = df.loc[mask, 'FN'] + 1
+    for x in fp:
+        c, value = max(test_regions[x]['prob'].items(), key=itemgetter(1))
+        save = {}
+        save['iou'] = np.max(iou_mat[x, :])
+        save['test_ind'] = x
+        results[c]['fp'].append(save)
+        mask = (df['category'] == c)
+        df.loc[mask, 'FP'] = df.loc[mask, 'FP'] + 1
+    df['precision'] = df.apply(lambda row: calc_prec(row['TP'], row['FP']), axis=1)
+    df['recall'] = df.apply(lambda row: calc_reca(row['TP'], row['FN']), axis=1)
+    return df, results
+
+
+def apply_mask(image, mask, color, alpha=0.5):
+    """Apply the given mask to the image.
+    """
+    for c in range(3):
+        image[:, :, c] = np.where(mask == 1,
+                                  image[:, :, c] *
+                                  (1 - alpha) + alpha * color[c] * 255,
+                                  image[:, :, c])
+    return image
+
+
+def display_class_prediction_overlaps(
+        image, segments, true_regions, test_regions, figsize=(16, 16), show_mask=True, show_bbox=True):
+    """
+    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
+    masks: [height, width, num_instances]
+    class_ids: [num_instances]
+    class_names: list of class names of the dataset
+    scores: (optional) confidence scores for each box
+    title: (optional) Figure title
+    show_mask, show_bbox: To show masks and bounding boxes or not
+    figsize: (optional) the size of the image
+    colors: (optional) An array or colors to use with each object
+    captions: (optional) A list of strings to use as captions for each object
+    """
+    for key, x in segments.items():
+        # If no axis is passed, create one and automatically call show()
+        ax=None
+        if not ax:
+            _, ax = plt.subplots(1, figsize=figsize)
+            auto_show = True
+
+        # Generate random colors
+        # Number of color segments (choosing three to match tp, fp, fn
+        # colors = colors or random_colors(3)
+        colors = [(0.0, 1.0, 0.40000000000000036),
+                  (1.0, 0.0, 1.0),
+                  (1.0, 1.0, 0.0)]
+        color_labels = ['tp', 'fn', 'fp']
+        # Show area outside image boundaries.
+        height, width = image.shape[:2]
+        ax.set_ylim(height + 10, -10)
+        ax.set_xlim(-10, width + 10)
+        ax.axis('off')
+        ax.set_title(key)
+        masked_image = image.astype(np.uint32).copy()
+        for typekey, type in x.items():
+            color = colors[color_labels.index(typekey)]
+            for seg in type:
+                if 'gt_ind' in list(seg.keys()):
+                    contour = true_regions['regions'][seg['gt_ind']]['points']
+                    seglabel = 'gt'
+                elif 'test_ind' in list(seg.keys()):
+                    contour = test_regions[seg['test_ind']]['contour']
+                    if 'prob' in list(seg.keys()):
+                        seglabel = 'IOU: {0:.2}, PROB: {0:.2%}'.format(seg['iou'], seg['prob'])
+                    else:
+                        seglabel = 'IOU: {0:.2}'.format(seg['iou'])
+
+                x1, y1, x2, y2 = compute_bbox(contour)
+                if show_bbox:
+                    p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+                                        alpha=0.7, linestyle="dashed",
+                                        edgecolor=color, facecolor='none')
+                    ax.add_patch(p)
+                ax.text(x1, y1 + 8, seglabel,
+                        color='w', size=15, backgroundcolor="none")
+                # Mask
+                mask = make_binary_mask(contour, (masked_image.shape[0], masked_image.shape[1]))
+                if show_mask:
+                    masked_image = apply_mask(masked_image, mask, color)
+
+        ax.imshow(masked_image.astype(np.uint8))
+        if auto_show:
+            plt.show()
