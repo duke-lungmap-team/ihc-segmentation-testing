@@ -73,27 +73,3 @@ class LungmapDataSet(DataSet):
             return mask, np.array(class_ids, dtype=np.int32), bboxes
         else:
             return mask, np.array(class_ids, dtype=np.int32)
-
-    def load_all_data_into_memory(self):
-        height = self.image_info[0]['height']
-        width = self.image_info[0]['width']
-        imgs = np.zeros([self.image_ids.shape[0], height, width, 3], dtype=np.uint8)
-        masks = np.zeros([self.image_ids.shape[0], height, width, len(self.class_names[1:])], dtype=np.uint8)
-        for i, imgid in enumerate(self.image_ids):
-            imgs[i, :, :, :] = self.load_image(imgid)
-            masks[i, :, :, :] = self.load_mask_unet(imgid)
-        return imgs, masks
-
-    def load_mask_unet(self, image_id):
-        """Generate instance masks for shapes of the given image ID.
-        """
-        info = self.image_info[image_id]
-        names = self.class_names[1:]
-        mask = np.zeros([info['height'], info['width'], len(names)], dtype=np.uint8)
-        for polygon in info['polygons']:
-            position = names.index(polygon['label'])
-            y = polygon['points'][:, 1]
-            x = polygon['points'][:, 0]
-            rr, cc = skimage.draw.polygon(y, x)
-            mask[rr, cc, position] = 1
-        return mask
