@@ -15,19 +15,16 @@ class LungMapTrainingConfig(Config):
     """
     Configuration for training
     """
+    NAME = 'lungmap'
+    GPU_COUNT = 1
     IMAGES_PER_GPU = 1
-    STEPS_PER_EPOCH = 50
-    VALIDATION_STEPS = 5
     # Number of classification classes (including background)
     # TODO: update this to be automatic
     NUM_CLASSES = 6  # Override in sub-classes
-    RPN_NMS_THRESHOLD = 0.9
-    RPN_TRAIN_ANCHORS_PER_IMAGE = 512
-    USE_MINI_MASK = False
-    TRAIN_ROIS_PER_IMAGE = 512
-    MAX_GT_INSTANCES = 160
-    DETECTION_MAX_INSTANCES = 160
-    DETECTION_MIN_CONFIDENCE = 0.6
+    RPN_ANCHOR_SCALES = (32, 64, 128, 256, 512)  # anchor side in pixels
+    STEPS_PER_EPOCH = 100
+    TRAIN_ROIS_PER_IMAGE = 300
+    VALIDATION_STEPS = 5
 
 
 config = LungMapTrainingConfig()
@@ -127,14 +124,12 @@ class MrCNNPipeline(Pipeline):
             final.append(instance)
         return final
 
-
-
     def test(self, model_weights='mask_rcnn_lungmap_0002.h5'):
-        if not os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5'):
+        if not os.path.join(self.model_dir, model_weights):
             logging.info(
                 'Could not find pre-trained weights mask_rcnn_lungmap_0002.h5 in tmp/models/mrcnn, caching now.'
             )
-            get_file_from_remote('mrcnn', 'mask_rcnn_lungmap_0002.h5')
+            get_file_from_remote('mrcnn', model_weights)
             logging.info(
                 'weights now cached: tmp/models/mrcnn/mask_rcnn_lungmap_0002.h5'
             )
@@ -145,7 +140,7 @@ class MrCNNPipeline(Pipeline):
             model_dir=self.model_dir
         )
         model.load_weights(
-            os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5'),
+            os.path.join(self.model_dir, model_weights),
             by_name=True
         )
         # model.load_weights(
