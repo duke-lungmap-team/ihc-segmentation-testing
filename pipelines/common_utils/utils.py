@@ -1,7 +1,7 @@
 import json
-import pandas as pd
 import PIL
 import numpy as np
+import pandas as pd
 import cv2
 from operator import itemgetter
 import os
@@ -140,7 +140,7 @@ def find_overlapping_regions(true_regions, test_regions):
     # There are 2 other cases to cover:
     #   - true regions with no matching overlaps (i.e. missed regions)
     #   - test regions with no matching overlaps (i.e. false positives)
-    true_overlaps = {}
+    overlaps = {}
     true_match_set = set()
     test_match_set = set()
 
@@ -172,8 +172,8 @@ def find_overlapping_regions(true_regions, test_regions):
             true_match_set.add(i)
             test_match_set.add(j)
 
-            if i not in true_overlaps:
-                true_overlaps[i] = {
+            if i not in overlaps:
+                overlaps[i] = {
                     'true': [],
                     'false': []
                 }
@@ -184,15 +184,15 @@ def find_overlapping_regions(true_regions, test_regions):
             }
 
             if true_classes[i] == test_classes[j]:
-                true_overlaps[i]['true'].append(test_result)
+                overlaps[i]['true'].append(test_result)
             else:
-                true_overlaps[i]['false'].append(test_result)
+                overlaps[i]['false'].append(test_result)
 
     missed_regions = true_match_set.symmetric_difference((range(0, len(true_boxes))))
     false_positives = test_match_set.symmetric_difference((range(0, len(test_boxes))))
 
     return {
-        'true_overlaps': true_overlaps,
+        'overlaps': overlaps,
         'missed_regions': missed_regions,
         'false_positives': false_positives
     }
@@ -227,7 +227,7 @@ def put_file_to_remote(model_name, file):
     ftp_client.close()
     c.close()
 
-
+    
 def get_file_from_remote(model_name, file_name):
     """
 
@@ -263,7 +263,7 @@ def get_file_from_remote(model_name, file_name):
     ftp_client.close()
     c.close()
 
-
+    
 def calc_reca(tps, fns):
     eps = np.spacing(1)
     recall = tps / (tps + fns + eps)
