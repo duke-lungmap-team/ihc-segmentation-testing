@@ -1,5 +1,5 @@
 import json
-import PIL
+from PIL import Image
 import numpy as np
 import cv2
 from operator import itemgetter
@@ -22,7 +22,7 @@ def get_training_data_for_image_set(image_set_dir):
 
     for image_name, sub_regions in regions_json.items():
         # noinspection PyUnresolvedReferences
-        tmp_image = PIL.Image.open(os.path.join(image_set_dir, image_name))
+        tmp_image = Image.open(os.path.join(image_set_dir, image_name))
         tmp_image = np.asarray(tmp_image)
 
         # noinspection PyUnresolvedReferences
