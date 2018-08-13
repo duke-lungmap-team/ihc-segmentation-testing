@@ -28,7 +28,7 @@ class LungmapDataSet(DataSet):
             for region in img_data['regions']:
                 anatomy.add(region['label'])
 
-        anatomy = list(anatomy)  # TODO: should this be sorted to ensure order?
+        anatomy = sorted(list(anatomy))  # TODO: should this be sorted to ensure order?
         for i, a in enumerate(anatomy):
             self.add_class("lungmap", i+1, a)
 
