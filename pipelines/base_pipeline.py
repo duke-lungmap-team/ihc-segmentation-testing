@@ -18,7 +18,7 @@ class Pipeline(object):
     def test(self):
         pass
 
-    def report(self):
+    def generate_report(self):
         self.report = utils.find_overlapping_regions(
             self.training_data[self.test_img_name],
             self.test_results

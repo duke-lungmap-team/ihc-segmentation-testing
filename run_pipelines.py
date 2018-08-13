@@ -42,6 +42,6 @@ for image_set in image_set_dirs:
             pickle.dump(pipe_instance, fh)
             fh.close()
 
-        pipe_instance.report()
+        pipe_instance.generate_report()
         pipe_instance.plot_results()
 
