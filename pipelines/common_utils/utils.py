@@ -361,10 +361,11 @@ def generate_dataframe_aggregation_tp_fn_fp(
         mask = (df['category'] == c)
         df.loc[mask, 'GTc'] = df.loc[mask, 'GTc'] + 1
     for x in tp.items():
-        save = {}
-        save['iou'] = iou_mat[x[1], x[0]]
-        save['prob'] = iou_mat[x[1], x[0]]
-        save['test_ind'] = x[1]
+        save = {
+            'iou': iou_mat[x[1], x[0]],
+            'prob': iou_mat[x[1], x[0]],
+            'test_ind': x[1]
+        }
         c = true_regions['regions'][x[0]]['label']
         results[c]['tp'].append(save)
         results[c]['tp'].append({'gt_ind': x[0]})
@@ -377,9 +378,10 @@ def generate_dataframe_aggregation_tp_fn_fp(
         df.loc[mask, 'FN'] = df.loc[mask, 'FN'] + 1
     for x in fp:
         c, value = max(test_regions[x]['prob'].items(), key=itemgetter(1))
-        save = {}
-        save['iou'] = np.max(iou_mat[x, :])
-        save['test_ind'] = x
+        save = {
+            'iou': np.max(iou_mat[x, :]),
+            'test_ind': x
+        }
         results[c]['fp'].append(save)
         mask = (df['category'] == c)
         df.loc[mask, 'FP'] = df.loc[mask, 'FP'] + 1
@@ -400,7 +402,14 @@ def apply_mask(image, mask, color, alpha=0.5):
 
 
 def display_class_prediction_overlaps(
-        image, segments, true_regions, test_regions, figsize=(16, 16), show_mask=True, show_bbox=True):
+        image,
+        segments,
+        true_regions,
+        test_regions,
+        figsize=(16, 16),
+        show_mask=True,
+        show_bbox=True
+):
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
     masks: [height, width, num_instances]
@@ -415,7 +424,7 @@ def display_class_prediction_overlaps(
     """
     for key, x in segments.items():
         # If no axis is passed, create one and automatically call show()
-        ax=None
+        ax = None
         if not ax:
             _, ax = plt.subplots(1, figsize=figsize)
             auto_show = True
@@ -449,12 +458,25 @@ def display_class_prediction_overlaps(
 
                 x1, y1, x2, y2 = compute_bbox(contour)
                 if show_bbox:
-                    p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
-                                        alpha=0.7, linestyle="dashed",
-                                        edgecolor=color, facecolor='none')
+                    p = patches.Rectangle(
+                        (x1, y1),
+                        x2 - x1,
+                        y2 - y1,
+                        linewidth=2,
+                        alpha=0.7,
+                        linestyle="dashed",
+                        edgecolor=color,
+                        facecolor='none'
+                    )
                     ax.add_patch(p)
-                ax.text(x1, y1 + 8, seglabel,
-                        color='w', size=15, backgroundcolor="none")
+                ax.text(
+                    x1,
+                    y1 + 8,
+                    seglabel,
+                    color='w',
+                    size=15,
+                    backgroundcolor="none"
+                )
                 # Mask
                 mask = make_binary_mask(contour, (masked_image.shape[0], masked_image.shape[1]))
                 if show_mask:

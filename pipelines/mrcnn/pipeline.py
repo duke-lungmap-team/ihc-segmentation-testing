@@ -2,7 +2,7 @@ from pipelines.base_pipeline import Pipeline
 from pipelines.mrcnn import model as modellib
 from pipelines.mrcnn.config import Config
 from pipelines.common_utils.lungmap_dataset import LungmapDataSet
-from pipelines.common_utils.utils import put_file_to_remote, get_file_from_remote
+from pipelines.common_utils.utils import get_file_from_remote
 import os
 import logging
 import numpy as np
@@ -10,6 +10,7 @@ import cv2
 
 FORMAT = '%(asctime)-15s %(message)s'
 logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+
 
 class LungMapTrainingConfig(Config):
     """
@@ -65,12 +66,12 @@ class MrCNNPipeline(Pipeline):
     def train(self, coco_model_weights='tmp/models/mrcnn/mask_rcnn_coco.h5'):
         """
         Method to train new algorithm
-        :param coco_model_weights: required is the pretrained h5 file which contains the coco trained model weights
+        :param coco_model_weights: required pre-trained h5 file containing coco model weights
         :return:
         """
         if not os.path.exists(coco_model_weights):
             logging.info(
-                'Could not find pre-trained weights maks_rcnn_coco_h5 in tmp/models/mrcnn, caching now.'
+                'Could not find pre-trained weights maks_rcnn_coco_h5, caching now.'
             )
             get_file_from_remote('mrcnn', 'mask_rcnn_coco.h5')
             logging.info(
@@ -85,7 +86,8 @@ class MrCNNPipeline(Pipeline):
                 "mrcnn_bbox_fc",
                 "mrcnn_bbox",
                 "mrcnn_mask"
-        ])
+            ]
+        )
         self.model.train(
             self.dataset_train,
             self.dataset_validation,
@@ -112,11 +114,14 @@ class MrCNNPipeline(Pipeline):
         class_names = [self.dataset_train.class_names[x] for x in maskrcnn_dict[0]['class_ids']]
         final = []
         for i in range(masks.shape[2]):
-            instance = {}
-            instance['prob'] = {class_names[i]: probs[i]}
-            image_8bit = np.uint8(masks[:,:,i].astype('int'))
-            _, contours, hierarchy = cv2.findContours(image_8bit, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-            if len(contours)>1:
+            instance = {'prob': {class_names[i]: probs[i]}}
+            image_8bit = np.uint8(masks[:, :, i].astype('int'))
+            _, contours, hierarchy = cv2.findContours(
+                image_8bit,
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_SIMPLE
+            )
+            if len(contours) > 1:
                 print('Returning more than 1 contour for a mask, what to do?')
                 continue
             else:
@@ -127,7 +132,7 @@ class MrCNNPipeline(Pipeline):
     def test(self, model_weights='mask_rcnn_lungmap_0002.h5'):
         if not os.path.join(self.model_dir, model_weights):
             logging.info(
-                'Could not find pre-trained weights mask_rcnn_lungmap_0002.h5 in tmp/models/mrcnn, caching now.'
+                'Could not find pre-trained weights mask_rcnn_lungmap_0002.h5, caching now.'
             )
             get_file_from_remote('mrcnn', model_weights)
             logging.info(
@@ -143,15 +148,6 @@ class MrCNNPipeline(Pipeline):
             os.path.join(self.model_dir, model_weights),
             by_name=True
         )
-        # model.load_weights(
-        #     os.path.join(self.model_dir, 'mask_rcnn_lungmap_0002.h5'),
-        #     by_name=True,
-        #     exclude=[
-        #         "mrcnn_class_logits",
-        #         "mrcnn_bbox_fc",
-        #         "mrcnn_bbox",
-        #         "mrcnn_mask"
-        #     ]
-        # )
+
         final = self._convert_to_contours(model.detect([img], verbose=1))
         self.test_results = final

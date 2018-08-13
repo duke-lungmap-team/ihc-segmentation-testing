@@ -129,8 +129,16 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
     return x
 
 
-def conv_block(input_tensor, kernel_size, filters, stage, block,
-               strides=(2, 2), use_bias=True, train_bn=True):
+def conv_block(
+        input_tensor,
+        kernel_size,
+        filters,
+        stage,
+        block,
+        strides=(2, 2),
+        use_bias=True,
+        train_bn=True
+):
     """
     conv_block is the block that has a conv layer at shortcut
 
@@ -140,6 +148,7 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
         filters: list of integers, the nb_filters of 3 conv layer at main path
         stage: integer, current stage label, used for generating layer names
         block: 'a','b'..., current block label, used for generating layer names
+        strides: stride length
         use_bias: Boolean. To use or not use a bias in conv layers.
         train_bn: Boolean. Train or freeze Batch Norm layers
     Note that from stage 3, the first conv layer at main path is with subsample=(2,2)
@@ -2204,7 +2213,7 @@ class MaskRCNN():
                 layer.layer.trainable = trainable
             else:
                 layer.trainable = trainable
-            # Print trainble layer names
+            # Print trainable layer names
             if trainable and verbose > 0:
                 log("{}{:20}   ({})".format(" " * indent, layer.name,
                                             layer.__class__.__name__))
