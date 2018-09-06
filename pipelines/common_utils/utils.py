@@ -174,6 +174,7 @@ def find_overlapping_regions(true_regions, test_regions):
 
             if i not in overlaps:
                 overlaps[i] = {
+                    'true_label': true_classes[i],
                     'true': [],
                     'false': []
                 }
@@ -264,19 +265,19 @@ def get_file_from_remote(model_name, file_name):
     c.close()
 
     
-def calc_reca(tps, fns):
+def calc_recall(tps, fns):
     eps = np.spacing(1)
     recall = tps / (tps + fns + eps)
     return recall
 
 
-def calc_prec(tps, fps):
+def calc_precision(tps, fps):
     eps = np.spacing(1)
     precision = tps / (tps + fps + eps)
     return precision
 
 
-def generate_iou_pred_matricies(true_regions, test_regions):
+def generate_iou_pred_matrices(true_regions, test_regions):
     true_boxes = []
     test_boxes = []
     img_dims = true_regions['hsv_img'].shape[:2]
@@ -331,8 +332,8 @@ def generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.5, pred_thresh=0.25):
             # TODO optionally only add if the prediction isn't already in tp.values()?
             if pred_mat[predind, gtind] > pred_thresh:
                 tp[gtind] = predind
-    fn = set(range(iou_mat.shape[1]))-set(tp.keys())
-    fp = set(range(iou_mat.shape[0]))-set(tp.values())
+    fn = set(range(iou_mat.shape[1])) - set(tp.keys())
+    fp = set(range(iou_mat.shape[0])) - set(tp.values())
     return tp, fn, fp
 
 
@@ -363,7 +364,7 @@ def generate_dataframe_aggregation_tp_fn_fp(
     for x in tp.items():
         save = {
             'iou': iou_mat[x[1], x[0]],
-            'prob': iou_mat[x[1], x[0]],
+            'prob': pred_mat[x[1], x[0]],
             'test_ind': x[1]
         }
         c = true_regions['regions'][x[0]]['label']
@@ -385,8 +386,8 @@ def generate_dataframe_aggregation_tp_fn_fp(
         results[c]['fp'].append(save)
         mask = (df['category'] == c)
         df.loc[mask, 'FP'] = df.loc[mask, 'FP'] + 1
-    df['precision'] = df.apply(lambda row: calc_prec(row['TP'], row['FP']), axis=1)
-    df['recall'] = df.apply(lambda row: calc_reca(row['TP'], row['FN']), axis=1)
+    df['precision'] = df.apply(lambda row: calc_precision(row['TP'], row['FP']), axis=1)
+    df['recall'] = df.apply(lambda row: calc_recall(row['TP'], row['FN']), axis=1)
     return df, results
 
 
