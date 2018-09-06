@@ -486,3 +486,99 @@ def display_class_prediction_overlaps(
         ax.imshow(masked_image.astype(np.uint8))
         if auto_show:
             plt.show()
+
+
+def mean_avg_precision(trained_pipeline):
+    iou_mat, pred_mat = generate_iou_pred_matrices(
+        trained_pipeline.training_data[trained_pipeline.test_img_name],
+        trained_pipeline.test_results
+    )
+
+    tp, fn, fp = generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.5, pred_thresh=0.25)
+
+    df, results = generate_dataframe_aggregation_tp_fn_fp(
+        trained_pipeline.training_data[trained_pipeline.test_img_name],
+        trained_pipeline.test_results,
+        iou_mat,
+        pred_mat,
+        tp,
+        fn,
+        fp
+    )
+
+    return df, results
+
+
+def plot_test_results(trained_pipeline, report):
+    hsv_img = trained_pipeline.training_data[trained_pipeline.test_img_name]['hsv_img'].copy()
+    ground_truth = trained_pipeline.training_data[trained_pipeline.test_img_name]['regions']
+    test_results = trained_pipeline.test_results
+
+    # first, map ground truth indices by label
+    gt_by_label_map = {}
+    for i, gt in enumerate(ground_truth):
+        if gt['label'] not in gt_by_label_map:
+            gt_by_label_map[gt['label']] = []
+
+        gt_by_label_map[gt['label']].append(gt['points'])
+
+    tp_by_label_map = {}
+    fp_by_label_map = {}
+    fn_by_label_map = {}
+    for k, v in report.items():
+        if k not in tp_by_label_map:
+            tp_by_label_map[k] = []
+            fp_by_label_map[k] = []
+            fn_by_label_map[k] = []
+
+        for tp in v['tp']:
+            if 'test_ind' in tp:
+                tp_by_label_map[k].append(
+                    test_results[tp['test_ind']]['contour']
+                )
+
+        for fp in v['fp']:
+            if 'test_ind' in fp:
+                fp_by_label_map[k].append(
+                    test_results[fp['test_ind']]['contour']
+                )
+
+        for fn in v['fn']:
+            if 'gt_ind' in fn:
+                fn_by_label_map[k].append(
+                    ground_truth[fn['gt_ind']]['points']
+                )
+
+    # create separate set of images for each class label
+    for class_label in sorted(report.keys()):
+        # ground truth
+        new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+        cv2.drawContours(new_img, gt_by_label_map[class_label], -1, (0, 255, 0), 5)
+        plt.figure(figsize=(8, 8))
+        plt.imshow(new_img)
+        plt.title("%s - %s" % (class_label, 'Ground Truth'))
+        plt.show()
+
+        # true positive
+        new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+        cv2.drawContours(new_img, tp_by_label_map[class_label], -1, (0, 255, 0), 5)
+        plt.figure(figsize=(8, 8))
+        plt.imshow(new_img)
+        plt.title("%s - %s" % (class_label, 'True Positive'))
+        plt.show()
+
+        # false negative
+        new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+        cv2.drawContours(new_img, fn_by_label_map[class_label], -1, (0, 255, 0), 5)
+        plt.figure(figsize=(8, 8))
+        plt.imshow(new_img)
+        plt.title("%s - %s" % (class_label, 'False Negative'))
+        plt.show()
+
+        # false positive
+        new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+        cv2.drawContours(new_img, fp_by_label_map[class_label], -1, (0, 255, 0), 5)
+        plt.figure(figsize=(8, 8))
+        plt.imshow(new_img)
+        plt.title("%s - %s" % (class_label, 'False Positive'))
+        plt.show()
