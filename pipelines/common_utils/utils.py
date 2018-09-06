@@ -5,9 +5,14 @@ import pandas as pd
 import cv2
 from operator import itemgetter
 import os
-import paramiko
 from matplotlib import patches
 import matplotlib.pyplot as plt
+
+# this is just to un-confuse pycharm
+try:
+    from cv2 import cv2
+except ImportError:
+    pass
 
 
 def get_training_data_for_image_set(image_set_dir):
@@ -197,72 +202,6 @@ def find_overlapping_regions(true_regions, test_regions):
         'missed_regions': missed_regions,
         'false_positives': false_positives
     }
-
-
-def put_file_to_remote(model_name, file):
-    """
-    Put a file to our remote store for sharing
-    :param model_name: str: name of model, this is used to stash file in particular folder
-    :param file: the unc path of the file to put to remote
-    :return:
-    """
-    k = paramiko.RSAKey.from_private_key_file(
-        os.getenv('pem_file')
-    )
-    c = paramiko.SSHClient()
-    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    c.connect(
-        hostname=os.getenv('remote_file_server'),
-        username=os.getenv('username'),
-        pkey=k
-    )
-    remote_file_path = os.path.join(
-        '/home',
-        os.getenv('username'),
-        'ihc-segmentation-testing-models',
-        model_name,
-        os.path.basename(file)
-    )
-    ftp_client = c.open_sftp()
-    ftp_client.put(file, remote_file_path)
-    ftp_client.close()
-    c.close()
-
-    
-def get_file_from_remote(model_name, file_name):
-    """
-
-    :param model_name: str: remote location of file to get
-    :param file_name: str: local location of file to save
-    :return:
-    """
-    k = paramiko.RSAKey.from_private_key_file(
-        os.getenv('pem_file')
-    )
-    c = paramiko.SSHClient()
-    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    c.connect(
-        hostname=os.getenv('remote_file_server'),
-        username=os.getenv('username'),
-        pkey=k
-    )
-    remote_file_path = os.path.join(
-        '/home',
-        os.getenv('username'),
-        'ihc-segmentation-testing-models',
-        model_name,
-        os.path.basename(file_name)
-    )
-    local_file_path = os.path.join(
-        'tmp',
-        'models',
-        model_name,
-        file_name
-    )
-    ftp_client = c.open_sftp()
-    ftp_client.get(remote_file_path, local_file_path)
-    ftp_client.close()
-    c.close()
 
     
 def calc_recall(tps, fns):
