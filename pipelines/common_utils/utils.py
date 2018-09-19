@@ -29,11 +29,9 @@ def get_training_data_for_image_set(image_set_dir):
     training_data = {}
 
     for image_name, sub_regions in regions_json.items():
-        # noinspection PyUnresolvedReferences
         tmp_image = Image.open(os.path.join(image_set_dir, image_name))
         tmp_image = np.asarray(tmp_image)
 
-        # noinspection PyUnresolvedReferences
         tmp_image = cv2.cvtColor(tmp_image, cv2.COLOR_RGB2HSV)
 
         training_data[image_name] = {
@@ -58,7 +56,6 @@ def get_training_data_for_image_set(image_set_dir):
 
 
 def compute_bbox(contour):
-    # noinspection PyUnresolvedReferences
     x1, y1, w, h = cv2.boundingRect(contour)
 
     return [x1, y1, x1 + w, y1 + h]
@@ -85,7 +82,6 @@ def do_boxes_overlap(box1, box2):
 
 def make_boolean_mask(contour, img_dims):
     mask = np.zeros(img_dims, dtype=np.uint8)
-    # noinspection PyUnresolvedReferences
     cv2.drawContours(
         mask,
         [contour],
@@ -100,7 +96,6 @@ def make_boolean_mask(contour, img_dims):
 
 def make_binary_mask(contour, img_dims):
     mask = np.zeros(img_dims, dtype=np.uint8)
-    # noinspection PyUnresolvedReferences
     cv2.drawContours(
         mask,
         [contour],
@@ -350,18 +345,6 @@ def display_class_prediction_overlaps(
         show_mask=True,
         show_bbox=True
 ):
-    """
-    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
-    masks: [height, width, num_instances]
-    class_ids: [num_instances]
-    class_names: list of class names of the dataset
-    scores: (optional) confidence scores for each box
-    title: (optional) Figure title
-    show_mask, show_bbox: To show masks and bounding boxes or not
-    figsize: (optional) the size of the image
-    colors: (optional) An array or colors to use with each object
-    captions: (optional) A list of strings to use as captions for each object
-    """
     for key, x in segments.items():
         # If no axis is passed, create one and automatically call show()
         ax = None
@@ -491,12 +474,13 @@ def plot_test_results(trained_pipeline, report):
     # create separate set of images for each class label
     for class_label in sorted(report.keys()):
         # ground truth
-        new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
-        cv2.drawContours(new_img, gt_by_label_map[class_label], -1, (0, 255, 0), 5)
-        plt.figure(figsize=(8, 8))
-        plt.imshow(new_img)
-        plt.title("%s - %s" % (class_label, 'Ground Truth'))
-        plt.show()
+        if class_label != 'background':
+            new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+            cv2.drawContours(new_img, gt_by_label_map[class_label], -1, (0, 255, 0), 5)
+            plt.figure(figsize=(8, 8))
+            plt.imshow(new_img)
+            plt.title("%s - %s" % (class_label, 'Ground Truth'))
+            plt.show()
 
         # true positive
         new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
