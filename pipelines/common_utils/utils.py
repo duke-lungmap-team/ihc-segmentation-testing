@@ -258,7 +258,7 @@ def generate_iou_pred_matrices(true_regions, test_regions):
     return iou_mat, pred_mat
 
 
-def generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.5, pred_thresh=0.25):
+def generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.33, pred_thresh=0.25):
     tp = {}
     for i in reversed(list(np.argsort(pred_mat, axis=None))):
         predind, gtind = np.unravel_index(i, pred_mat.shape)
@@ -408,27 +408,6 @@ def display_class_prediction_overlaps(
         ax.imshow(masked_image.astype(np.uint8))
         if auto_show:
             plt.show()
-
-
-def mean_avg_precision(trained_pipeline):
-    iou_mat, pred_mat = generate_iou_pred_matrices(
-        trained_pipeline.training_data[trained_pipeline.test_img_name],
-        trained_pipeline.test_results
-    )
-
-    tp, fn, fp = generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.5, pred_thresh=0.25)
-
-    df, results = generate_dataframe_aggregation_tp_fn_fp(
-        trained_pipeline.training_data[trained_pipeline.test_img_name],
-        trained_pipeline.test_results,
-        iou_mat,
-        pred_mat,
-        tp,
-        fn,
-        fp
-    )
-
-    return df, results
 
 
 def plot_test_results(trained_pipeline, report):

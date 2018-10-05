@@ -4,12 +4,19 @@ import pkgutil
 from importlib import import_module
 import inspect
 from pipelines.base_pipeline import Pipeline
+from pipelines.common_utils import utils
 
 # dynamically load all sub-classes of our base Pipeline class
 pipelines = {}
 
+ignore_pipelines = [
+    'base_pipeline',
+    'common_utils',
+    'mrcnn'
+]
+
 for (ff, name, is_pkg) in pkgutil.iter_modules(['pipelines']):
-    if name in ['base_pipeline', 'common_utils']:
+    if name in ignore_pipelines:
         continue
 
     new_module = import_module('pipelines.' + name, package='pipelines')
@@ -30,6 +37,7 @@ if not os.path.isdir('tmp'):
 for image_set in image_set_dirs:
     for pipe_class_name, pipe_class in pipelines.items():
         pkl_path = os.path.join('tmp', '_'.join([image_set, pipe_class_name + '.pkl']))
+        test_img_path = os.path.join('tmp', '_'.join([image_set, pipe_class_name]))
         image_set_path = os.path.join('data', image_set)
 
         try:
@@ -37,11 +45,12 @@ for image_set in image_set_dirs:
         except (FileNotFoundError, TypeError):
             pipe_instance = pipe_class(image_set_path)
             pipe_instance.train()
-            pipe_instance.test()
             fh = open(pkl_path, 'wb')
             pickle.dump(pipe_instance, fh)
             fh.close()
 
+        pipe_instance.test(saved_region_parent_dir=test_img_path)
         pipe_instance.generate_report()
-        pipe_instance.plot_results()
-
+        df, report = pipe_instance.mean_avg_precision()
+        utils.plot_test_results(pipe_instance, report)
+        # pipe_instance.plot_results()

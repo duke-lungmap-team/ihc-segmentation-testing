@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import os
 from lung_map_utils import utils
 from lung_map_utils_extra import utils_extra
 from pipelines.base_pipeline import Pipeline
@@ -15,6 +16,8 @@ class SVMPipeline(Pipeline):
     def __init__(self, image_set_dir, test_img_index=0):
         super(SVMPipeline, self).__init__(image_set_dir, test_img_index)
         self.pipe = utils.pipeline
+        self.training_data_processed = None
+        self.test_data_processed = None
 
     def train(self):
         # process the training data to get custom metrics
@@ -23,6 +26,9 @@ class SVMPipeline(Pipeline):
         for img_name, img_data in self.training_data.items():
             if img_name == self.test_img_name:
                 continue
+
+            non_bg_regions = []
+
             for region in img_data['regions']:
                 training_data_processed.append(
                     utils.generate_features(
@@ -32,263 +38,483 @@ class SVMPipeline(Pipeline):
                     )
                 )
 
+                non_bg_regions.append(region['points'])
+
+            bg_contours = utils_extra.generate_background_contours(
+                img_data['hsv_img'],
+                non_bg_regions
+            )
+
+            for region in bg_contours:
+                training_data_processed.append(
+                    utils.generate_features(
+                        hsv_img_as_numpy=img_data['hsv_img'],
+                        polygon_points=region,
+                        label='background'
+                    )
+                )
+
         # train the SVM model with the ground truth
-        training_data_processed = pd.DataFrame(training_data_processed)
+        self.training_data_processed = pd.DataFrame(training_data_processed)
         self.pipe.fit(
-            training_data_processed.drop('label', axis=1),
-            training_data_processed['label']
+            self.training_data_processed.drop('label', axis=1),
+            self.training_data_processed['label']
         )
 
-    def test(self):
-        color_blur_kernel = (27, 27)
-        large_blur_kernel = (91, 91)
+    def test(self, saved_region_parent_dir=None):
+        print("Pre-processing test data...")
 
-        img = self.training_data[self.test_img_name]['hsv_img']
+        img_hsv = self.training_data[self.test_img_name]['hsv_img']
+        img_rgb = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2RGB)
+        img_s = img_hsv[:, :, 1]
+        img_shape = (img_hsv.shape[0], img_hsv.shape[1])
 
-        # color threshold candidates
-        img_blur_c = cv2.GaussianBlur(
-            cv2.cvtColor(img, cv2.COLOR_HSV2RGB),
-            color_blur_kernel,
-            0
-        )
-        img_blur_c_hsv = cv2.cvtColor(img_blur_c, cv2.COLOR_RGB2HSV)
+        # blur kernels
+        large_blur_kernel = (95, 95)
+        med_blur_kernel = (63, 63)
+        small_blur_kernel = (31, 31)
 
-        # create masks from feature colors
-        mask = utils.create_mask(
-            img_blur_c_hsv,
+        # Dilation/erosion kernels
+        cross_strel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+        block_strel = np.ones((3, 3))
+        ellipse_strel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        ellipse90_strel = np.rot90(ellipse_strel)
+        circle_strel = np.bitwise_or(ellipse_strel, ellipse90_strel)
+
+        b_over_r = img_rgb[:, :, 0] < img_rgb[:, :, 2]
+        b_over_g = img_rgb[:, :, 1] < img_rgb[:, :, 2]
+        b_over_rg = np.bitwise_and(b_over_r, b_over_g)
+
+        b_replace = np.max([img_rgb[:, :, 0], img_rgb[:, :, 1]], axis=0)
+
+        b_suppress_img = img_rgb.copy()
+        b_suppress_img[b_over_rg, 2] = b_replace[b_over_rg]
+        b_suppress_img_hsv = cv2.cvtColor(b_suppress_img, cv2.COLOR_RGB2HSV)
+        enhanced_v_img = b_suppress_img_hsv[:, :, 2]
+
+        # diff of gaussians
+        img_blur_1 = cv2.blur(enhanced_v_img, (15, 15))
+        img_blur_2 = cv2.blur(enhanced_v_img, (127, 127))
+
+        tmp_img_1 = img_blur_1.astype(np.int16)
+        tmp_img_2 = img_blur_2.astype(np.int16)
+
+        edge_mask = tmp_img_2 - tmp_img_1
+        edge_mask[edge_mask > 0] = 0
+        edge_mask[edge_mask < 0] = 255
+
+        edge_mask = edge_mask.astype(np.uint8)
+
+        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=15 * 15)
+
+        edge_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(edge_mask, contours, -1, 255, -1)
+
+        edge_mask = cv2.dilate(edge_mask, cross_strel, iterations=1)
+
+        # color candidates (all non-monochrome, non-blue colors)
+        print("Generating color candidates...")
+
+        tmp_color_img = cv2.cvtColor(b_suppress_img_hsv, cv2.COLOR_HSV2RGB)
+        tmp_color_img = cv2.blur(tmp_color_img, (9, 9))
+        tmp_color_img = cv2.cvtColor(tmp_color_img, cv2.COLOR_RGB2HSV)
+
+        color_mask = utils.create_mask(
+            tmp_color_img,
             [
-                'cyan',
-                'gray',
-                'green',
-                'red',
-                'violet',
-                'white',
-                'yellow'
+                'green', 'cyan', 'red', 'violet', 'yellow'
             ]
         )
 
-        # define kernel used for erosion & dilation
-        kernel = np.ones((3, 3), np.uint8)
+        # Next, clean up any "noise", say, ~ 11 x 11
+        contours = utils_extra.filter_contours_by_size(color_mask, min_size=5 * 5)
 
-        # dilate masks
-        mask = cv2.dilate(mask, kernel, iterations=3)
+        color_mask2 = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(color_mask2, contours, -1, 255, -1)
 
-        # fill holes in mask using contours
-        mask = utils_extra.fill_holes(mask)
+        # do a couple dilations to smooth some outside edges & connect any
+        # adjacent cells each other
+        color_mask3 = cv2.dilate(color_mask2, cross_strel, iterations=2)
+        color_mask3 = cv2.erode(color_mask3, cross_strel, iterations=3)
 
-        good_contours_color = utils_extra.filter_contours_by_size(mask, min_size=2048)
-        good_contours_color_final = []
+        # filter out any remaining contours that are the size of roughly 2 cells
+        contours = utils_extra.filter_contours_by_size(color_mask3, min_size=2 * 40 * 40)
 
-        for good_c in good_contours_color:
-            hull_c = cv2.convexHull(good_c)
-            good_contours_color_final.append(hull_c)
+        color_mask3 = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(color_mask3, contours, -1, 255, -1)
 
-        # start large structure saturation candidates
-        img_s = img[:, :, 1]
-        img_blur_s_large = cv2.GaussianBlur(img_s, large_blur_kernel, 0)
+        good_color_contours = []
 
-        lower_bound, upper_bound = utils_extra.determine_hist_mode(img_blur_s_large)
+        for i, c in enumerate(contours):
+            filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
 
-        mode_s_large = cv2.inRange(img_blur_s_large, lower_bound, upper_bound)
-
-        cross_strel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
-
-        good_contours_large = utils_extra.filter_contours_by_size(
-            mode_s_large,
-            min_size=200 * 200
-        )
-        new_good_contours_large = []
-
-        for good_c in good_contours_large:
-
-            single_cnt_mask = np.zeros(mode_s_large.shape, dtype=np.uint8)
-            cv2.drawContours(single_cnt_mask, [good_c], 0, 255, -1)
-
-            # dilate single_cnt_mask up to 91 pixels (~47 times)
-            single_cnt_mask = cv2.dilate(single_cnt_mask, cross_strel, iterations=47)
-
-            ret, thresh = cv2.threshold(single_cnt_mask, 1, 255, cv2.THRESH_BINARY)
-            new_mask, contours, hierarchy = cv2.findContours(
-                thresh,
-                cv2.RETR_CCOMP,
-                cv2.CHAIN_APPROX_SIMPLE
+            new_mask, signal, orig = utils_extra.find_border_by_mask(
+                edge_mask,
+                filled_c_mask,
+                max_dilate_percentage=0.3,
+                dilate_iterations=1
             )
 
-            new_good_contours_large.append(contours[0])
-
-        # start small structure saturation candidates
-        img_blur_s_small = cv2.GaussianBlur(img_s, (31, 31), 0)
-        img_blur_s_small = cv2.bilateralFilter(img_blur_s_small, 31, 31, 255)  # (41, 41), 0)
-
-        mode_s_small1 = cv2.inRange(img_blur_s_small, 240, 256)
-        mode_s_small2 = cv2.inRange(img_blur_s_small, 232, 248)
-        mode_s_small3 = cv2.inRange(img_blur_s_small, 224, 240)
-
-        min_size = 32 * 32 * 2
-        max_size = 200 * 200
-
-        good_contours_small1 = utils_extra.filter_contours_by_size(
-            mode_s_small1,
-            min_size=min_size,
-            max_size=max_size
-        )
-        good_contours_small2 = utils_extra.filter_contours_by_size(
-            mode_s_small2,
-            min_size=min_size,
-            max_size=max_size
-        )
-        good_contours_small3 = utils_extra.filter_contours_by_size(
-            mode_s_small3,
-            min_size=min_size,
-            max_size=max_size
-        )
-
-        small_contour_sets = [good_contours_small1, good_contours_small2, good_contours_small3]
-
-        new_good_contours_small = []
-
-        for c_set in small_contour_sets:
-
-            for good_c in c_set:
-                hull_c = cv2.convexHull(good_c)
-
-                single_cnt_mask = np.zeros(img_s.shape, dtype=np.uint8)
-                cv2.drawContours(single_cnt_mask, [hull_c], 0, 255, -1)
-
-                # dilate single_cnt_mask up to 47 pixels (~23 times)
-                single_cnt_mask = cv2.dilate(single_cnt_mask, cross_strel, iterations=23)
-
-                ret, thresh = cv2.threshold(single_cnt_mask, 1, 255, cv2.THRESH_BINARY)
-                new_mask, contours, hierarchy = cv2.findContours(
-                    thresh,
-                    cv2.RETR_CCOMP,
+            if not orig and signal > 0.7:
+                _, contours, _ = cv2.findContours(
+                    new_mask,
+                    cv2.RETR_EXTERNAL,
                     cv2.CHAIN_APPROX_SIMPLE
                 )
 
-                new_good_contours_small.append(contours[0])
+                good_color_contours.append(contours[0])
+            elif orig and signal > 0.7:
+                good_color_contours.append(c)
+            else:
+                pass  # don't include contour
 
-        # merge all candidates
-        all_contours = new_good_contours_small + \
-            new_good_contours_large + \
-            good_contours_color_final
+        # The previous contours represent the final count of contours for the color group,
+        # but not their final shape/size. The final step is to use approxPolyDP, followed
+        # by a few more dilations, but we won't re-draw and extract the contours, as that
+        # would possibly connect some of them together. However, we will draw them for
+        # the mask to exclude these regions from the next 2 groups of candidates
+        final_color_contours = []
 
-        border_contours, non_border_contours = utils_extra.find_border_contours(
-            all_contours,
-            img_s.shape[0],
-            img_s.shape[1]
+        for c in good_color_contours:
+            peri = cv2.arcLength(c, True)
+            smooth_c = cv2.approxPolyDP(c, 0.007 * peri, True)
+
+            single_cnt_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(single_cnt_mask, [smooth_c], 0, 255, -1)
+
+            # erode & dilate
+            single_cnt_mask = cv2.erode(single_cnt_mask, block_strel, iterations=1)
+            single_cnt_mask = cv2.dilate(single_cnt_mask, block_strel, iterations=8)
+
+            _, contours, _ = cv2.findContours(
+                single_cnt_mask,
+                cv2.RETR_EXTERNAL,
+
+                cv2.CHAIN_APPROX_SIMPLE
+            )
+
+            if len(contours) > 0:
+                final_color_contours.append(contours[0])
+
+        # final color mask to use for exclusion from further groups
+        final_color_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(final_color_mask, final_color_contours, -1, 255, -1)
+
+        # start large structure saturation candidates
+        print("Generating large saturation candidates...")
+
+        img_s_large_blur = cv2.GaussianBlur(img_s, large_blur_kernel, 0, 0)
+
+        med = np.median(img_s_large_blur[img_s_large_blur > 0])
+
+        img_s_large_blur = cv2.bitwise_and(
+            img_s_large_blur,
+            img_s_large_blur,
+            mask=~final_color_mask
+        )
+        mode_s_large = cv2.inRange(img_s_large_blur, med, 255)
+        mode_s_large = cv2.erode(mode_s_large, block_strel, iterations=5)
+
+        good_contours_large = utils_extra.filter_contours_by_size(
+            mode_s_large,
+            min_size=10 * 32 * 32,
+            max_size=(img_shape[0] * img_shape[1]) * .33
         )
 
-        # fill the border contours
-        filled_border_contours = []
+        # update the signal mask by removing the previous color candidates
+        edge_mask = cv2.bitwise_and(edge_mask, edge_mask, mask=~final_color_mask)
+        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=21 * 21)
+        edge_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(edge_mask, contours, -1, 255, -1)
+        edge_mask = cv2.dilate(edge_mask, (3, 3), iterations=2)
 
-        for c in border_contours:
-            filled_mask = utils_extra.fill_border_contour(c, img_s.shape)
+        good_large_sat_val_contours = []
 
-            new_mask, contours, hierarchy = cv2.findContours(
-                filled_mask,
-                cv2.RETR_CCOMP,
+        for i, c in enumerate(good_contours_large):
+            filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
+
+            new_mask, signal, orig = utils_extra.find_border_by_mask(
+                edge_mask,
+                filled_c_mask,
+                max_dilate_percentage=2.0,
+                dilate_iterations=1
+            )
+
+            if not orig and signal > 0.7:
+                _, contours, _ = cv2.findContours(
+                    new_mask,
+                    cv2.RETR_EXTERNAL,
+                    cv2.CHAIN_APPROX_SIMPLE
+                )
+
+                good_large_sat_val_contours.append(contours[0])
+            elif signal > 0.7:
+                good_large_sat_val_contours.append(c)
+            else:
+                pass  # ignore contour
+
+        # The previous contours represent the final contour count for the large sat-val group,
+        # but not their final shape/size. The final step is to use approxPolyDP, followed
+        # by a few more dilations, but we won't re-draw and extract the contours, as that
+        # would possibly connect some of them together. However, we will draw them for
+        # the mask to exclude these regions from the next group of candidates
+        final_large_sat_val_contours = []
+
+        for c in good_large_sat_val_contours:
+            peri = cv2.arcLength(c, True)
+            smooth_c = cv2.approxPolyDP(c, 0.0035 * peri, True)
+
+            single_cnt_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(single_cnt_mask, [smooth_c], 0, 255, -1)
+
+            # erode & dilate
+            single_cnt_mask = cv2.dilate(single_cnt_mask, circle_strel, iterations=10)
+
+            _, tmp_contours, _ = cv2.findContours(
+                single_cnt_mask,
+                cv2.RETR_EXTERNAL,
                 cv2.CHAIN_APPROX_SIMPLE
             )
 
-            filled_border_contours.append(contours[0])
+            final_large_sat_val_contours.append(tmp_contours[0])
 
-        # recombine the filled border contours and non-border contours
-        all_contours = filled_border_contours + non_border_contours
+        # final group mask to use for exclusion from further groups
+        final_large_sat_val_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(final_large_sat_val_mask, final_large_sat_val_contours, -1, 255, -1)
 
-        # now that we have all our contour candidates, we need to check for overlaps
-        # using bounding boxes
-        all_rects = []
+        # start medium structure saturation candidates
+        print("Generating medium saturation candidates...")
 
-        for c in all_contours:
-            all_rects.append(cv2.boundingRect(c))
+        img_s_medium_blur = cv2.GaussianBlur(img_s, med_blur_kernel, 0, 0)
+        med = np.median(img_s_medium_blur[img_s_medium_blur > 0])
 
-        rect_combos = []
+        # make intermediate candidate mask
+        tmp_candidate_mask = np.bitwise_or(final_color_mask, final_large_sat_val_mask)
 
-        for i, r1 in enumerate(all_rects[:-1]):
-            a1 = r1[2] * r1[3]
+        img_s_medium_blur = cv2.bitwise_and(
+            img_s_medium_blur,
+            img_s_medium_blur,
+            mask=~tmp_candidate_mask
+        )
 
-            for j, r2 in enumerate(all_rects[i + 1:]):
-                max_x0 = max([r1[0], r2[0]])
-                min_x1 = min([r1[0] + r1[2], r2[0] + r2[2]])
+        mode_s_med = cv2.inRange(img_s_medium_blur, np.ceil(med), 255)
 
-                if min_x1 < max_x0:
-                    continue
+        mode_s_med = cv2.erode(mode_s_med, block_strel, iterations=8)
 
-                max_y0 = max([r1[1], r2[1]])
-                min_y1 = min([r1[1] + r1[3], r2[1] + r2[3]])
+        good_contours_med = utils_extra.filter_contours_by_size(
+            mode_s_med,
+            min_size=2 * 32 * 32,
+            max_size=(img_shape[0] * img_shape[1]) * .125
+        )
 
-                if min_y1 < max_y0:
-                    continue
+        # update signal mask with last group of candidates
+        edge_mask = cv2.bitwise_and(edge_mask, edge_mask, mask=~final_large_sat_val_mask)
+        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=21 * 21)
 
-                a_int = (min_x1 - max_x0) * (min_y1 - max_y0)
+        edge_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(edge_mask, contours, -1, 255, -1)
+        edge_mask = cv2.dilate(edge_mask, (3, 3), iterations=2)
 
-                if a_int >= 0.7 * a1:
-                    a2 = r2[2] * r2[3]
+        final_med_sat_val_contours = []
 
-                    if a_int > 0.7 * a2:
-                        rect_combos.append({i, i + j + 1})
+        for i, c in enumerate(good_contours_med):
+            filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
 
-        i = 0
+            new_mask, signal, orig = utils_extra.find_border_by_mask(
+                edge_mask,
+                filled_c_mask,
+                max_dilate_percentage=1.5,
+                dilate_iterations=1
+            )
 
-        while i < len(rect_combos[:-1]):
-            j = i + 1
+            if not orig and signal > 0.7:
+                _, contours, _ = cv2.findContours(
+                    new_mask,
+                    cv2.RETR_EXTERNAL,
+                    cv2.CHAIN_APPROX_SIMPLE
+                )
 
-            while j < len(rect_combos):
-                if len(rect_combos[i].intersection(rect_combos[j])) > 0:
-                    rect_combos[i] = rect_combos[i].union(rect_combos[j])
-                    rect_combos.remove(rect_combos[j])
-                    j -= 1
-                j += 1
-            i += 1
+                final_med_sat_val_contours.append(contours[0])
+            elif signal > 0.7:
+                final_med_sat_val_contours.append(c)
+            else:
+                pass  # ignore contour
 
-        c_combo_list = []
+        med_sat_val_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(med_sat_val_mask, final_med_sat_val_contours, -1, 255, cv2.FILLED)
 
-        for c in rect_combos:
-            c_combo_list.extend(list(c))
+        # The previous contours represent the final count of contours for the med sat-val group,
+        # but not their final shape/size. The final step is to use approxPolyDP, followed
+        # by a few more dilations, but we won't re-draw and extract the contours, as that
+        # would possibly connect some of them together. However, we will draw them for
+        # the mask to exclude these regions from the next group of candidates
+        _, contours, _ = cv2.findContours(
+            med_sat_val_mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
 
-        combined_contour_masks = []
+        final_med_sat_val_contours = []
 
-        for c in rect_combos:
-            c_idx_list = list(c)
-            c_list = []
+        for c in contours:
+            peri = cv2.arcLength(c, True)
+            smooth_c = cv2.approxPolyDP(c, 0.0035 * peri, True)
 
-            for ci in c_idx_list:
-                c_list.append(all_contours[ci])
+            single_cnt_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(single_cnt_mask, [smooth_c], 0, 255, -1)
 
-            combined_contour_masks.append(utils_extra.find_contour_union(c_list, img_s.shape))
+            # erode & dilate
+            single_cnt_mask = cv2.dilate(single_cnt_mask, ellipse90_strel, iterations=10)
 
-        for i, c in enumerate(all_contours):
-            if i in c_combo_list:
-                continue
+            _, tmp_contours, _ = cv2.findContours(
+                single_cnt_mask,
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE
+            )
 
-            c_mask = np.zeros(img_s.shape, dtype=np.uint8)
-            cv2.drawContours(c_mask, [c], 0, 255, cv2.FILLED)
-            combined_contour_masks.append(c_mask)
+            final_med_sat_val_contours.append(tmp_contours[0])
+
+        # final color mask to use for exclusion from further groups
+        final_med_sat_val_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(final_med_sat_val_mask, final_med_sat_val_contours, -1, 255, -1)
+
+        # start small structure saturation candidates
+        print("Generating small saturation candidates...")
+
+        img_s_small_blur = cv2.bilateralFilter(img_s, small_blur_kernel[0], 31, 31)
+        med = np.median(img_s_small_blur[img_s_small_blur > 0])
+
+        # make intermediate candidate mask
+        tmp_candidate_mask = np.bitwise_or(tmp_candidate_mask, final_med_sat_val_mask)
+
+        img_s_small_blur = cv2.bitwise_and(
+            img_s_small_blur,
+            img_s_small_blur,
+            mask=~tmp_candidate_mask
+        )
+
+        mode_s_small = cv2.inRange(img_s_small_blur, np.ceil(med), 255)
+
+        mode_s_small = cv2.erode(mode_s_small, block_strel, iterations=2)
+
+        good_contours_small = utils_extra.filter_contours_by_size(
+            mode_s_small,
+            min_size=15 * 15,
+            max_size=(img_shape[0] * img_shape[1]) * .05
+        )
+
+        # update signal mask with last group of candidates
+        edge_mask = cv2.bitwise_and(edge_mask, edge_mask, mask=~final_med_sat_val_mask)
+        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=31 * 31)
+        edge_mask = np.zeros(img_shape, dtype=np.uint8)
+        cv2.drawContours(edge_mask, contours, -1, 255, -1)
+        edge_mask = cv2.dilate(edge_mask, (3, 3), iterations=3)
+
+        good_small_sat_val_contours = []
+
+        for i, c in enumerate(good_contours_small):
+            filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
+
+            new_mask, signal, orig = utils_extra.find_border_by_mask(
+                edge_mask,
+                filled_c_mask,
+                max_dilate_percentage=2.5,
+                dilate_iterations=1
+            )
+
+            if not orig and signal > 0.7:
+                _, contours, _ = cv2.findContours(
+                    new_mask,
+                    cv2.RETR_EXTERNAL,
+                    cv2.CHAIN_APPROX_SIMPLE
+                )
+
+                good_small_sat_val_contours.append(contours[0])
+            elif signal > 0.7:
+                good_small_sat_val_contours.append(c)
+            else:
+                pass  # ignore contour
+
+        tmp_small_sat_val_contours = good_small_sat_val_contours.copy()
+        good_small_sat_val_contours = []
+
+        for c in tmp_small_sat_val_contours:
+            area = cv2.contourArea(c)
+            if area > 27 * 27:
+                good_small_sat_val_contours.append(c)
+
+        # The previous contours represent the final countour count for the small sat-val group,
+        # but not their final shape/size. The final step is to use approxPolyDP, followed
+        # by a few more dilations, but we won't re-draw and extract the contours, as that
+        # would possibly connect some of them together. However, we will draw them for
+        # the mask to exclude these regions from the next group of candidates
+        final_small_sat_val_contours = []
+
+        for c in good_small_sat_val_contours:
+            peri = cv2.arcLength(c, True)
+            smooth_c = cv2.approxPolyDP(c, 0.007 * peri, True)
+
+            single_cnt_mask = np.zeros(img_shape, dtype=np.uint8)
+            cv2.drawContours(single_cnt_mask, [smooth_c], 0, 255, -1)
+
+            # erode & dilate
+            single_cnt_mask = cv2.dilate(single_cnt_mask, block_strel, iterations=10)
+
+            _, tmp_contours, _ = cv2.findContours(
+                single_cnt_mask,
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE
+            )
+
+            final_small_sat_val_contours.append(tmp_contours[0])
+
+        all_contours = final_color_contours + \
+            final_large_sat_val_contours + \
+            final_med_sat_val_contours + \
+            final_small_sat_val_contours
 
         model_classes = list(self.pipe.named_steps['classification'].classes_)
-        prob_threshold = 2 * (1.0 / len(model_classes))
-        final_contours = []
+        final_contour_results = []
 
-        for m in combined_contour_masks:
-            new_mask, contours, hierarchy = cv2.findContours(
-                m,
-                cv2.RETR_CCOMP,
-                cv2.CHAIN_APPROX_SIMPLE
-            )
-            c = contours[0]
+        test_data_processed = []
 
-            features = utils.generate_features(img, c)
+        for c_idx, c in enumerate(all_contours):
+            if saved_region_parent_dir is not None:
+                region_base_name = '.'.join([str(c_idx), 'png'])
+                region_file_path = os.path.join(saved_region_parent_dir, region_base_name)
+
+                if not os.path.exists(saved_region_parent_dir):
+                    os.makedirs(saved_region_parent_dir)
+            else:
+                region_file_path = None
+                region_base_name = None
+            features = utils.generate_features(img_hsv, c, region_file_path=region_file_path)
             features_df = pd.DataFrame([features])
             probabilities = self.pipe.predict_proba(features_df.drop('label', axis=1))
+            labelled_probs = {a: probabilities[0][i] for i, a in enumerate(model_classes)}
+            pred_label = max(labelled_probs, key=lambda key: labelled_probs[key])
+            pred_label_prob = labelled_probs[pred_label]
 
-            if probabilities.max() < prob_threshold:
-                continue
-
-            final_contours.append(
+            final_contour_results.append(
                 {
+                    'test_index': c_idx,
                     'contour': c,
-                    'prob': {a: probabilities[0][i] for i, a in enumerate(model_classes)}
+                    'prob': labelled_probs
                 }
             )
 
-        self.test_results = final_contours
+            features['pred_label'] = pred_label
+            features['pred_label_prob'] = pred_label_prob
+            features['region_file'] = region_base_name
+            features['region_index'] = c_idx
+
+            test_data_processed.append(features)
+
+        self.test_data_processed = pd.DataFrame(test_data_processed)
+        self.test_data_processed.set_index('region_index')
+
+        self.test_results = final_contour_results
