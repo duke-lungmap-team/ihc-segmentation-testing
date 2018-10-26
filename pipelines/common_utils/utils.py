@@ -2,7 +2,6 @@ import json
 from PIL import Image
 import numpy as np
 import pandas as pd
-import cv2
 from operator import itemgetter
 import os
 from matplotlib import patches
@@ -12,23 +11,24 @@ import matplotlib.pyplot as plt
 try:
     from cv2 import cv2
 except ImportError:
-    pass
+    import cv2
 
 
 def get_training_data_for_image_set(image_set_dir):
     # Each image set directory will have a 'regions.json' file. This regions file
     # has keys of the image file names in the image set, and the value for each image
-    # is a list of segmented polygon regions.
+    # is a dict of class labels, and the value of those labels is a list of
+    # segmented polygon regions.
     # First, we will read in this file and get the file names for our images
     regions_file = open(os.path.join(image_set_dir, 'regions.json'))
     regions_json = json.load(regions_file)
     regions_file.close()
 
-    # output will be a dictionary of training data, were the polygon points dict is a
-    # numpy array. The keys will still be the image names
+    # output will be a dictionary of training data, were the polygon points dict
+    # is a numpy array. The keys will still be the image names
     training_data = {}
 
-    for image_name, sub_regions in regions_json.items():
+    for image_name, regions_dict in regions_json.items():
         tmp_image = Image.open(os.path.join(image_set_dir, image_name))
         tmp_image = np.asarray(tmp_image)
 
@@ -39,18 +39,20 @@ def get_training_data_for_image_set(image_set_dir):
             'regions': []
         }
 
-        for region in sub_regions:
-            points = np.empty((0, 2), dtype='int')
+        for label, regions in regions_dict.items():
 
-            for point in sorted(region['points'], key=itemgetter('order')):
-                points = np.append(points, [[point['x'], point['y']]], axis=0)
+            for region in regions:
+                points = np.empty((0, 2), dtype='int')
 
-            training_data[image_name]['regions'].append(
-                {
-                    'label': region['anatomy'],
-                    'points': points
-                }
-            )
+                for point in region:
+                    points = np.append(points, [[point[0], point[1]]], axis=0)
+
+                training_data[image_name]['regions'].append(
+                    {
+                        'label': label,
+                        'points': points
+                    }
+                )
 
     return training_data
 
@@ -278,19 +280,20 @@ def generate_dataframe_aggregation_tp_fn_fp(
         pred_mat,
         tp,
         fn,
-        fp):
+        fp
+):
     class_names = set()
     for x in true_regions['regions']:
         class_names.add(x['label'])
     for x in test_regions:
-        type, value = max(x['prob'].items(), key=itemgetter(1))
-        class_names.add(type)
+        c, value = max(x['prob'].items(), key=itemgetter(1))
+        class_names.add(c)
     results = {k: {'tp': [], 'fp': [], 'fn': []} for k in class_names}
     df = pd.DataFrame({'category': list(class_names)})
-    df['TP'] = [0 for x in list(class_names)]
-    df['FP'] = [0 for x in list(class_names)]
-    df['FN'] = [0 for x in list(class_names)]
-    df['GTc'] = [0 for x in list(class_names)]
+    df['TP'] = [0 for _ in list(class_names)]
+    df['FP'] = [0 for _ in list(class_names)]
+    df['FN'] = [0 for _ in list(class_names)]
+    df['GTc'] = [0 for _ in list(class_names)]
     for x in true_regions['regions']:
         c = x['label']
         mask = (df['category'] == c)
@@ -366,9 +369,9 @@ def display_class_prediction_overlaps(
         ax.axis('off')
         ax.set_title(key)
         masked_image = image.astype(np.uint32).copy()
-        for typekey, type in x.items():
+        for typekey, t in x.items():
             color = colors[color_labels.index(typekey)]
-            for seg in type:
+            for seg in t:
                 if 'gt_ind' in list(seg.keys()):
                     contour = true_regions['regions'][seg['gt_ind']]['points']
                     seglabel = 'gt'
