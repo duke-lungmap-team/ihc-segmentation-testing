@@ -2,7 +2,7 @@ from .common_utils import utils
 import abc
 
 
-class Pipeline(object):
+class BasePipeline(object):
     def __init__(self, image_set_dir, test_img_index=0):
         # get labeled ground truth regions from given image set
         self.training_data = utils.get_training_data_for_image_set(image_set_dir)

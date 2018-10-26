@@ -1,4 +1,4 @@
-from pipelines.base_pipeline import Pipeline
+from pipelines.base_pipeline import BasePipeline
 from pipelines.mrcnn import model as modellib
 from pipelines.mrcnn.config import Config
 from pipelines.common_utils.lungmap_dataset import LungmapDataSet
@@ -6,7 +6,11 @@ from pipelines.common_utils.utils import get_file_from_remote
 import os
 import logging
 import numpy as np
-import cv2
+# weird import style to un-confuse PyCharm
+try:
+    from cv2 import cv2
+except ImportError:
+    import cv2
 
 FORMAT = '%(asctime)-15s %(message)s'
 logging.basicConfig(format=FORMAT, level=logging.DEBUG)
@@ -31,7 +35,7 @@ class LungMapTrainingConfig(Config):
 config = LungMapTrainingConfig()
 
 
-class MrCNNPipeline(Pipeline):
+class MrCNNPipeline(BasePipeline):
     def __init__(self, image_set_dir, model_dir='tmp/models/mrcnn', test_img_index=0):
         super(MrCNNPipeline, self).__init__(image_set_dir, test_img_index)
 

@@ -1,4 +1,4 @@
-from pipelines.base_pipeline import Pipeline
+from pipelines.base_pipeline import BasePipeline
 from pipelines.unet.unet_architecture_paper import unet_padded
 from pipelines.common_utils.lungmap_dataset import LungmapDataSet
 from pipelines.unet.data_pipeline import unet_generators
@@ -9,7 +9,7 @@ import scipy
 import numpy as np
 import matplotlib.pyplot as plt
 
-class LungmapUnetPipeline(Pipeline):
+class LungmapUnetPipeline(BasePipeline):
     def __init__(self,
                  image_set_dir,
                  model_dir='tmp/models/unet',
@@ -74,6 +74,7 @@ class LungmapUnetPipeline(Pipeline):
             epochs=epochparam,
             callbacks=[model_checkpoint],
         )
+
     def test(self):
         img, m = self.dataset_test.load_all_data_into_memory()
         print_all_masks(img, m)
