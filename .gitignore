@@ -1,4 +1,6 @@
 # Project specific stuff
+data/
+data
 tmp/
 .DS_Store
 
