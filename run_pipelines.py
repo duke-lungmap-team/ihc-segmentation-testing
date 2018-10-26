@@ -3,7 +3,7 @@ import pickle
 import pkgutil
 from importlib import import_module
 import inspect
-from pipelines.base_pipeline import Pipeline
+from pipelines.base_pipeline import BasePipeline
 from pipelines.common_utils import utils
 
 # dynamically load all sub-classes of our base Pipeline class
@@ -23,7 +23,7 @@ for (ff, name, is_pkg) in pkgutil.iter_modules(['pipelines']):
 
     for i in dir(new_module):
         attribute = getattr(new_module, i)
-        if inspect.isclass(attribute) and issubclass(attribute, Pipeline):
+        if inspect.isclass(attribute) and issubclass(attribute, BasePipeline):
             pipelines[i] = attribute
 
 # get list of image sets
@@ -43,7 +43,7 @@ for image_set in image_set_dirs:
         try:
             pipe_instance = pickle.load(open(pkl_path, 'rb'))
         except (FileNotFoundError, TypeError):
-            pipe_instance = pipe_class(image_set_path)
+            pipe_instance = pipe_class(image_set_path, 7)
             pipe_instance.train()
             fh = open(pkl_path, 'wb')
             pickle.dump(pipe_instance, fh)

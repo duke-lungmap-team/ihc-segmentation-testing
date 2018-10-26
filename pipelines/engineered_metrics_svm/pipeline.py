@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
 import os
-from lung_map_utils import utils
-from lung_map_utils_extra import utils_extra
-from pipelines.base_pipeline import Pipeline
+from cv_color_features import utils as color_utils
+from cv2_extras import utils as cv2x
+from pipelines.base_pipeline import BasePipeline
+from sklearn.svm import SVC
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
 
 # weird import style to un-confuse PyCharm
 try:
@@ -12,10 +15,16 @@ except ImportError:
     import cv2
 
 
-class SVMPipeline(Pipeline):
+class SVMPipeline(BasePipeline):
     def __init__(self, image_set_dir, test_img_index=0):
         super(SVMPipeline, self).__init__(image_set_dir, test_img_index)
-        self.pipe = utils.pipeline
+        classifier = SVC(probability=True, class_weight='balanced')
+        self.pipe = Pipeline(
+            [
+                ('scaler', MinMaxScaler()),
+                ('classification', classifier)
+            ]
+        )
         self.training_data_processed = None
         self.test_data_processed = None
 
@@ -31,7 +40,7 @@ class SVMPipeline(Pipeline):
 
             for region in img_data['regions']:
                 training_data_processed.append(
-                    utils.generate_features(
+                    color_utils.generate_features(
                         hsv_img_as_numpy=img_data['hsv_img'],
                         polygon_points=region['points'],
                         label=region['label']
@@ -40,14 +49,14 @@ class SVMPipeline(Pipeline):
 
                 non_bg_regions.append(region['points'])
 
-            bg_contours = utils_extra.generate_background_contours(
+            bg_contours = cv2x.generate_background_contours(
                 img_data['hsv_img'],
                 non_bg_regions
             )
 
             for region in bg_contours:
                 training_data_processed.append(
-                    utils.generate_features(
+                    color_utils.generate_features(
                         hsv_img_as_numpy=img_data['hsv_img'],
                         polygon_points=region,
                         label='background'
@@ -105,7 +114,7 @@ class SVMPipeline(Pipeline):
 
         edge_mask = edge_mask.astype(np.uint8)
 
-        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=15 * 15)
+        contours = cv2x.filter_contours_by_size(edge_mask, min_size=15 * 15)
 
         edge_mask = np.zeros(img_shape, dtype=np.uint8)
         cv2.drawContours(edge_mask, contours, -1, 255, -1)
@@ -119,7 +128,7 @@ class SVMPipeline(Pipeline):
         tmp_color_img = cv2.blur(tmp_color_img, (9, 9))
         tmp_color_img = cv2.cvtColor(tmp_color_img, cv2.COLOR_RGB2HSV)
 
-        color_mask = utils.create_mask(
+        color_mask = color_utils.create_mask(
             tmp_color_img,
             [
                 'green', 'cyan', 'red', 'violet', 'yellow'
@@ -127,7 +136,7 @@ class SVMPipeline(Pipeline):
         )
 
         # Next, clean up any "noise", say, ~ 11 x 11
-        contours = utils_extra.filter_contours_by_size(color_mask, min_size=5 * 5)
+        contours = cv2x.filter_contours_by_size(color_mask, min_size=5 * 5)
 
         color_mask2 = np.zeros(img_shape, dtype=np.uint8)
         cv2.drawContours(color_mask2, contours, -1, 255, -1)
@@ -138,7 +147,7 @@ class SVMPipeline(Pipeline):
         color_mask3 = cv2.erode(color_mask3, cross_strel, iterations=3)
 
         # filter out any remaining contours that are the size of roughly 2 cells
-        contours = utils_extra.filter_contours_by_size(color_mask3, min_size=2 * 40 * 40)
+        contours = cv2x.filter_contours_by_size(color_mask3, min_size=2 * 40 * 40)
 
         color_mask3 = np.zeros(img_shape, dtype=np.uint8)
         cv2.drawContours(color_mask3, contours, -1, 255, -1)
@@ -149,7 +158,7 @@ class SVMPipeline(Pipeline):
             filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
             cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
 
-            new_mask, signal, orig = utils_extra.find_border_by_mask(
+            new_mask, signal, orig = cv2x.find_border_by_mask(
                 edge_mask,
                 filled_c_mask,
                 max_dilate_percentage=0.3,
@@ -216,7 +225,7 @@ class SVMPipeline(Pipeline):
         mode_s_large = cv2.inRange(img_s_large_blur, med, 255)
         mode_s_large = cv2.erode(mode_s_large, block_strel, iterations=5)
 
-        good_contours_large = utils_extra.filter_contours_by_size(
+        good_contours_large = cv2x.filter_contours_by_size(
             mode_s_large,
             min_size=10 * 32 * 32,
             max_size=(img_shape[0] * img_shape[1]) * .33
@@ -224,7 +233,7 @@ class SVMPipeline(Pipeline):
 
         # update the signal mask by removing the previous color candidates
         edge_mask = cv2.bitwise_and(edge_mask, edge_mask, mask=~final_color_mask)
-        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=21 * 21)
+        contours = cv2x.filter_contours_by_size(edge_mask, min_size=21 * 21)
         edge_mask = np.zeros(img_shape, dtype=np.uint8)
         cv2.drawContours(edge_mask, contours, -1, 255, -1)
         edge_mask = cv2.dilate(edge_mask, (3, 3), iterations=2)
@@ -235,7 +244,7 @@ class SVMPipeline(Pipeline):
             filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
             cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
 
-            new_mask, signal, orig = utils_extra.find_border_by_mask(
+            new_mask, signal, orig = cv2x.find_border_by_mask(
                 edge_mask,
                 filled_c_mask,
                 max_dilate_percentage=2.0,
@@ -303,7 +312,7 @@ class SVMPipeline(Pipeline):
 
         mode_s_med = cv2.erode(mode_s_med, block_strel, iterations=8)
 
-        good_contours_med = utils_extra.filter_contours_by_size(
+        good_contours_med = cv2x.filter_contours_by_size(
             mode_s_med,
             min_size=2 * 32 * 32,
             max_size=(img_shape[0] * img_shape[1]) * .125
@@ -311,7 +320,7 @@ class SVMPipeline(Pipeline):
 
         # update signal mask with last group of candidates
         edge_mask = cv2.bitwise_and(edge_mask, edge_mask, mask=~final_large_sat_val_mask)
-        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=21 * 21)
+        contours = cv2x.filter_contours_by_size(edge_mask, min_size=21 * 21)
 
         edge_mask = np.zeros(img_shape, dtype=np.uint8)
         cv2.drawContours(edge_mask, contours, -1, 255, -1)
@@ -323,7 +332,7 @@ class SVMPipeline(Pipeline):
             filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
             cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
 
-            new_mask, signal, orig = utils_extra.find_border_by_mask(
+            new_mask, signal, orig = cv2x.find_border_by_mask(
                 edge_mask,
                 filled_c_mask,
                 max_dilate_percentage=1.5,
@@ -400,7 +409,7 @@ class SVMPipeline(Pipeline):
 
         mode_s_small = cv2.erode(mode_s_small, block_strel, iterations=2)
 
-        good_contours_small = utils_extra.filter_contours_by_size(
+        good_contours_small = cv2x.filter_contours_by_size(
             mode_s_small,
             min_size=15 * 15,
             max_size=(img_shape[0] * img_shape[1]) * .05
@@ -408,7 +417,7 @@ class SVMPipeline(Pipeline):
 
         # update signal mask with last group of candidates
         edge_mask = cv2.bitwise_and(edge_mask, edge_mask, mask=~final_med_sat_val_mask)
-        contours = utils_extra.filter_contours_by_size(edge_mask, min_size=31 * 31)
+        contours = cv2x.filter_contours_by_size(edge_mask, min_size=31 * 31)
         edge_mask = np.zeros(img_shape, dtype=np.uint8)
         cv2.drawContours(edge_mask, contours, -1, 255, -1)
         edge_mask = cv2.dilate(edge_mask, (3, 3), iterations=3)
@@ -419,7 +428,7 @@ class SVMPipeline(Pipeline):
             filled_c_mask = np.zeros(img_shape, dtype=np.uint8)
             cv2.drawContours(filled_c_mask, [c], -1, 255, cv2.FILLED)
 
-            new_mask, signal, orig = utils_extra.find_border_by_mask(
+            new_mask, signal, orig = cv2x.find_border_by_mask(
                 edge_mask,
                 filled_c_mask,
                 max_dilate_percentage=2.5,
@@ -492,7 +501,11 @@ class SVMPipeline(Pipeline):
             else:
                 region_file_path = None
                 region_base_name = None
-            features = utils.generate_features(img_hsv, c, region_file_path=region_file_path)
+            features = color_utils.generate_features(
+                img_hsv,
+                c,
+                region_file_path=region_file_path
+            )
             features_df = pd.DataFrame([features])
             probabilities = self.pipe.predict_proba(features_df.drop('label', axis=1))
             labelled_probs = {a: probabilities[0][i] for i, a in enumerate(model_classes)}

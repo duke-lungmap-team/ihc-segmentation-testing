@@ -1,10 +1,11 @@
+scikit-learn
 opencv-python
 numpy
-git+git://github.com/duke-lungmap-team/lung-map-utils.git
-git+git://github.com/duke-lungmap-team/lung-map-utils-extra.git
+git+git://github.com/whitews/cv-color-features.git
+git+git://github.com/whitews/cv2-extras.git
 Pillow
 pandas
-tensorflow
+tensorflow-gpu
 keras
 matplotlib
 scikit-image
