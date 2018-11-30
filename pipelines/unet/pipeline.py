@@ -47,20 +47,17 @@ class LungmapUnetPipeline(BasePipeline):
 
         self.train_generator, self.class_names = unet_generators(
             self.dataset_train,
-            self.dataset_train.class_names,
             input_shape,
             output_shape,
         )
         self.val_generator, _ = unet_generators(
             self.dataset_validation,
-            self.dataset_train.class_names,
             input_shape,
             output_shape
         )
 
         self.test_generator, _ = unet_generators(
             self.dataset_test,
-            self.dataset_train.class_names,
             input_shape,
             output_shape
         )
@@ -95,11 +92,12 @@ class LungmapUnetPipeline(BasePipeline):
         )
 
     def test(self):
-        img, m = self.test_generator
+        gen = self.test_generator
+        img, m = next(gen)
         trained_model = load_model(self.model_name)
         pred = trained_model.predict(img)
         pred_thresh = np.where(pred > 0.5, 1, 0)
-        print_all_masks(img, pred_thresh)
+        print_all_masks(img.astype('uint8'), pred_thresh)
         return
 
 
