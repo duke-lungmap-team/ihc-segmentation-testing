@@ -10,3 +10,4 @@ keras
 matplotlib
 scikit-image
 paramiko
+scipy
