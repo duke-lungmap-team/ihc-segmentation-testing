@@ -15,12 +15,7 @@ class LungmapUnetPipeline(BasePipeline):
                  model_dir='tmp/models/unet',
                  test_img_index=0,
                  input_shape=(1024, 1024, 3),
-                 output_shape=(1024, 1024, 5),
-                 classes = ['distal acinar tubule bud',
-                            'bronchiole',
-                            'respiratory system blood vessel',
-                            'bronchial artery',
-                            'proximal acinar tubule']
+                 output_shape=(1024, 1024, 5)
                  ):
         super(LungmapUnetPipeline, self).__init__(image_set_dir, test_img_index)
 
