@@ -18,8 +18,10 @@ def load_all_data_into_memory(dataset_object):
         masks[i, :, :, :] = load_mask_unet(dataset_object, imgid)
     return imgs, masks
 
+
 def load_mask_unet(dataset_object, image_id):
-    """Generate instance masks for shapes of the given image ID.
+    """
+    Generate instance masks for shapes of the given image ID.
     """
     info = dataset_object.image_info[image_id]
     names = dataset_object.class_names[1:]

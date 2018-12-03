@@ -21,7 +21,8 @@ def obtain_data_from_dataset(dataset, input_shape, output_shape):
 
 
 def get_generator(images_resize, masks_resize):
-    #TODO: the two generators must have same attributes or the seed get's messed up and disconnected from one another
+    # TODO: the two generators must have same attributes or the seed get's
+    # messed up and disconnected from one another
     image_datagen = ImageDataGenerator(
         horizontal_flip=True,
         vertical_flip=True,

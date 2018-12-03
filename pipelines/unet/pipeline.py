@@ -91,7 +91,7 @@ class LungmapUnetPipeline(BasePipeline):
             callbacks=[model_checkpoint],
         )
 
-    def test(self):
+    def test(self, saved_region_parent_dir=None):
         gen = self.test_generator
         img, m = next(gen)
         trained_model = load_model(self.model_name)
