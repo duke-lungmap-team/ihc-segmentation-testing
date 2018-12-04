@@ -11,3 +11,4 @@ matplotlib
 scikit-image
 paramiko
 scipy
+joblib
