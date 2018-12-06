@@ -7,8 +7,10 @@ class BasePipeline(object):
         # get labeled ground truth regions from given image set
         self.training_data = utils.get_training_data_for_image_set(image_set_dir)
         self.test_img_name = sorted(self.training_data.keys())[test_img_index]
+        self.test_marker_set = set(self.test_img_name.split('_')[-4:-1])
         self.test_results = None
         self.report = None
+        self.test_data_processed = None
 
     @abc.abstractmethod
     def train(self):
@@ -87,7 +89,8 @@ class BasePipeline(object):
 
     def plot_results(self):
         if self.report is None:
-            raise UserWarning("There are no results to plot, have you run report()?")
-            return
+            raise UserWarning(
+                "There are no results to plot, have you run report()?"
+            )
 
-        utils.plot_results(self.training_data[self.test_img_name]['hsv_img'], self.report)
+        utils.plot_test_results(self.training_data[self.test_img_name]['hsv_img'], self.report)
