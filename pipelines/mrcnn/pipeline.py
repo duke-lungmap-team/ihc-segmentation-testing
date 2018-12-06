@@ -2,7 +2,7 @@ from pipelines.base_pipeline import BasePipeline
 from pipelines.mrcnn import model as modellib
 from pipelines.mrcnn.config import Config
 from pipelines.common_utils.lungmap_dataset import LungmapDataSet
-from pipelines.common_utils.utils import get_file_from_remote
+from pipelines.mrcnn.utils import get_file_from_remote
 import os
 import logging
 import numpy as np

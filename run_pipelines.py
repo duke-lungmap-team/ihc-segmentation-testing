@@ -10,25 +10,27 @@ from pipelines.common_utils import utils
 pipelines = {}
 
 ignore_pipelines = [
-    'base_pipeline',
-    'common_utils',
-    'mrcnn'
+    'BasePipeline',
+    'SVMPipeline',
+    'MrCNNPipeline',
+    'UnetPipeline'
 ]
 
 for (ff, name, is_pkg) in pkgutil.iter_modules(['pipelines']):
-    if name in ignore_pipelines:
-        continue
-
     new_module = import_module('pipelines.' + name, package='pipelines')
 
     for i in dir(new_module):
+        if i in ignore_pipelines:
+            continue
         attribute = getattr(new_module, i)
         if inspect.isclass(attribute) and issubclass(attribute, BasePipeline):
             pipelines[i] = attribute
 
 # get list of image sets
-image_set_dirs = os.listdir('data')
+image_set_dirs = os.listdir('data/mm_e16.5_20x_sox9_sftpc_acta2/light_color_corrected')
 image_set_dirs = [x for x in image_set_dirs if not x.startswith('.')]
+
+image_set_dirs = ['mm_e16.5_20x_sox9_sftpc_acta2/light_color_corrected']
 
 # make our 'tmp' directory for caching trained & tested pipeline instances
 if not os.path.isdir('tmp'):
@@ -36,8 +38,18 @@ if not os.path.isdir('tmp'):
 
 for image_set in image_set_dirs:
     for pipe_class_name, pipe_class in pipelines.items():
-        pkl_path = os.path.join('tmp', '_'.join([image_set, pipe_class_name + '.pkl']))
-        test_img_path = os.path.join('tmp', '_'.join([image_set, pipe_class_name]))
+        pkl_path = os.path.join(
+            'tmp',
+            '_'.join([image_set, pipe_class_name + '.pkl'])
+        )
+        pkl_dir = os.path.dirname(pkl_path)
+        if not os.path.exists(pkl_dir):
+            os.makedirs(pkl_dir)
+
+        test_img_path = os.path.join(
+            'tmp',
+            '_'.join([image_set, pipe_class_name])
+        )
         image_set_path = os.path.join('data', image_set)
 
         try:
@@ -53,4 +65,3 @@ for image_set in image_set_dirs:
         pipe_instance.generate_report()
         df, report = pipe_instance.mean_avg_precision()
         utils.plot_test_results(pipe_instance, report)
-        # pipe_instance.plot_results()

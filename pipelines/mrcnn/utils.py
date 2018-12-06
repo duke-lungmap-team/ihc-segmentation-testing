@@ -7,12 +7,14 @@ Licensed under the MIT License (see LICENSE for details)
 Written by Waleed Abdulla
 """
 import random
+import os
 import numpy as np
 import tensorflow as tf
 import scipy
 import skimage.color
 import skimage.io
 import skimage.transform
+import paramiko
 import warnings
 
 
@@ -251,7 +253,6 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
         raise Exception("Mode {} not supported".format(mode))
     return image.astype(image_dtype), window, scale, padding, crop
 
-
 def resize_mask(mask, scale, padding, crop=None):
     """
     Re-sizes a mask using the given scale and padding.
@@ -459,3 +460,38 @@ def denorm_boxes(boxes, shape):
     scale = np.array([h - 1, w - 1, h - 1, w - 1])
     shift = np.array([0, 0, 1, 1])
     return np.around(np.multiply(boxes, scale) + shift).astype(np.int32)
+
+
+def get_file_from_remote(model_name, file_name):
+    """	
+    :param model_name: str: remote location of file to get	
+    :param file_name: str: local location of file to save	
+    :return:	
+    """
+    k = paramiko.RSAKey.from_private_key_file(
+        os.getenv('pem_file')
+    )
+    c = paramiko.SSHClient()
+    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    c.connect(
+        hostname=os.getenv('remote_file_server'),
+        username=os.getenv('username'),
+        pkey=k
+    )
+    remote_file_path = os.path.join(
+        '/home',
+        os.getenv('username'),
+        'ihc-segmentation-testing-models',
+        model_name,
+        os.path.basename(file_name)
+    )
+    local_file_path = os.path.join(
+        'tmp',
+        'models',
+        model_name,
+        file_name
+    )
+    ftp_client = c.open_sftp()
+    ftp_client.get(remote_file_path, local_file_path)
+    ftp_client.close()
+    c.close()
