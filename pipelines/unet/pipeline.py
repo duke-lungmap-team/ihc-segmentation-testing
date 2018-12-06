@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-class LungmapUnetPipeline(BasePipeline):
+class UnetPipeline(BasePipeline):
     def __init__(self,
                  image_set_dir,
                  model_dir='tmp/models/unet',
@@ -20,7 +20,7 @@ class LungmapUnetPipeline(BasePipeline):
                  input_shape=(1024, 1024, 3),
                  output_shape=(1024, 1024, 5)
                  ):
-        super(LungmapUnetPipeline, self).__init__(image_set_dir)
+        super(UnetPipeline, self).__init__(image_set_dir)
 
         # TODO: make sure there are enough images in the image set, as this pipeline
         # needs to separate an image for validation, in addition to the reserved test image.
