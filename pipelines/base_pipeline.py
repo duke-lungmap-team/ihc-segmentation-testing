@@ -1,5 +1,13 @@
 from .common_utils import utils
 import abc
+import matplotlib.pyplot as plt
+import os
+
+# this is just to un-confuse pycharm
+try:
+    from cv2 import cv2
+except ImportError:
+    import cv2
 
 
 class BasePipeline(object):
@@ -21,12 +29,6 @@ class BasePipeline(object):
         pass
 
     def generate_report(self):
-        self.report = utils.find_overlapping_regions(
-            self.training_data[self.test_img_name],
-            self.test_results
-        )
-
-    def mean_avg_precision(self):
         iou_mat, pred_mat = utils.generate_iou_pred_matrices(
             self.training_data[self.test_img_name],
             self.test_results
@@ -90,12 +92,117 @@ class BasePipeline(object):
                     res_dict['iou']
                 )
 
-        return df, results
+        self.report = results
 
-    def plot_results(self):
+        return df
+
+    def plot_results(self, save_dir=None):
         if self.report is None:
             raise UserWarning(
                 "There are no results to plot, have you run report()?"
             )
 
-        utils.plot_test_results(self.training_data[self.test_img_name]['hsv_img'], self.report)
+        hsv_img = self.training_data[self.test_img_name]['hsv_img'].copy()
+        ground_truth = self.training_data[self.test_img_name]['regions']
+        test_results = self.test_results
+        pipeline_name = type(self).__name__
+
+        # first, map ground truth indices by label
+        gt_by_label_map = {}
+        for i, gt in enumerate(ground_truth):
+            if gt['label'] not in gt_by_label_map:
+                gt_by_label_map[gt['label']] = []
+
+            gt_by_label_map[gt['label']].append(gt['points'])
+
+        tp_by_label_map = {}
+        fp_by_label_map = {}
+        fn_by_label_map = {}
+        for k, v in self.report.items():
+            if k not in tp_by_label_map:
+                tp_by_label_map[k] = []
+                fp_by_label_map[k] = []
+                fn_by_label_map[k] = []
+
+            for tp in v['tp']:
+                if 'test_ind' in tp:
+                    tp_by_label_map[k].append(
+                        test_results[tp['test_ind']]['contour']
+                    )
+
+            for fp in v['fp']:
+                if 'test_ind' in fp:
+                    fp_by_label_map[k].append(
+                        test_results[fp['test_ind']]['contour']
+                    )
+
+            for fn in v['fn']:
+                if 'gt_ind' in fn:
+                    fn_by_label_map[k].append(
+                        ground_truth[fn['gt_ind']]['points']
+                    )
+
+        # create separate set of images for each class label
+        for class_label in sorted(self.report.keys()):
+            # ground truth
+            if class_label != 'background':
+                new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+                cv2.drawContours(new_img, gt_by_label_map[class_label], -1, (0, 255, 0), 5)
+                plt.figure(figsize=(8, 8))
+                plt.imshow(new_img)
+                title = "%s - %s - 01 - %s" % (pipeline_name, class_label, 'Ground Truth')
+                plt.title(title)
+
+                if save_dir is not None:
+                    plt.savefig(
+                        os.path.join(save_dir, title + '.png'),
+                        bbox_inches='tight'
+                    )
+                else:
+                    plt.show()
+
+            # true positive
+            new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+            cv2.drawContours(new_img, tp_by_label_map[class_label], -1, (0, 255, 0), 5)
+            plt.figure(figsize=(8, 8))
+            plt.imshow(new_img)
+            title = "%s - %s - 02 - %s" % (pipeline_name, class_label, 'True Positive')
+            plt.title(title)
+            if save_dir is not None:
+                plt.savefig(
+                    os.path.join(save_dir, title + '.png'),
+                    bbox_inches='tight'
+                )
+            else:
+                plt.show()
+
+            # false negative
+            new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+            cv2.drawContours(new_img, fn_by_label_map[class_label], -1, (0, 255, 0), 5)
+            plt.figure(figsize=(8, 8))
+            plt.imshow(new_img)
+            title = "%s - %s - 03 - %s" % (pipeline_name, class_label, 'False Negative')
+            plt.title(title)
+            if save_dir is not None:
+                plt.savefig(
+                    os.path.join(save_dir, title + '.png'),
+                    bbox_inches='tight'
+                )
+            else:
+                plt.show()
+
+            # false positive
+            new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
+            cv2.drawContours(new_img, fp_by_label_map[class_label], -1, (0, 255, 0), 5)
+            plt.figure(figsize=(8, 8))
+            plt.imshow(new_img)
+            title = "%s - %s - 04 - %s" % (pipeline_name, class_label, 'False Positive')
+            plt.title(title)
+            if save_dir is not None:
+                plt.savefig(
+                    os.path.join(save_dir, title + '.png'),
+                    bbox_inches='tight'
+                )
+            else:
+                plt.show()
+            plt.close()

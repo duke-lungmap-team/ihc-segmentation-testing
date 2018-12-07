@@ -4,7 +4,6 @@ import pkgutil
 from importlib import import_module
 import inspect
 from pipelines.base_pipeline import BasePipeline
-from pipelines.common_utils import utils
 
 # dynamically load all sub-classes of our base Pipeline class
 pipelines = {}
@@ -64,7 +63,8 @@ for image_set in image_set_dirs:
             pickle.dump(pipe_instance, fh)
             fh.close()
 
-        pipe_instance.test(saved_region_parent_dir=test_img_path)
-        pipe_instance.generate_report()
-        df, report = pipe_instance.mean_avg_precision()
-        utils.plot_test_results(pipe_instance, report)
+        pipe_instance.test(
+            saved_region_parent_dir=os.path.join(test_img_path, 'regions')
+        )
+        df = pipe_instance.generate_report()
+        pipe_instance.plot_results(save_dir=test_img_path)
