@@ -32,7 +32,12 @@ class BasePipeline(object):
             self.test_results
         )
 
-        tp, fn, fp = utils.generate_tp_fn_fp(iou_mat, pred_mat, iou_thresh=0.33, pred_thresh=0.25)
+        tp, fn, fp = utils.generate_tp_fn_fp(
+            iou_mat,
+            pred_mat,
+            iou_thresh=0.33,
+            pred_thresh=0.50
+        )
 
         df, results = utils.generate_dataframe_aggregation_tp_fn_fp(
             self.training_data[self.test_img_name],
