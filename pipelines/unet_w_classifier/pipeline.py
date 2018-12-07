@@ -15,12 +15,11 @@ from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
 import copy
 from joblib import dump, load
-from cv2 import findContours
 import cv2
 import scipy
 
 
-class LungmapUnetClassifierPipeline(BasePipeline):
+class UnetClassifierPipeline(BasePipeline):
     def __init__(self,
                  image_set_dir,
                  model_dir='tmp/models/unet',
@@ -167,7 +166,7 @@ class LungmapUnetClassifierPipeline(BasePipeline):
         pred_thresh = np.where(pred > 0.5, 1, 0)
         assert pred_thresh.shape[0] == 1
         pred_thresh_up = scipy.misc.imresize(pred_thresh[0, :, :, 0], (2475, 2475))
-        _, contours, _ = findContours(
+        _, contours, _ = cv2.findContours(
             pred_thresh_up.astype('uint8'),
             cv2.RETR_EXTERNAL,
             cv2.CHAIN_APPROX_SIMPLE

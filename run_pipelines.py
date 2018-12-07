@@ -9,11 +9,14 @@ from pipelines.common_utils import utils
 # dynamically load all sub-classes of our base Pipeline class
 pipelines = {}
 
+# by default, all pipelines are ignored...comment out to include them
 ignore_pipelines = [
     'BasePipeline',
     'SVMPipeline',
+    'XGBPipeline',
     'MrCNNPipeline',
-    'UnetPipeline'
+    'UnetPipeline',
+    'UnetClassifierPipeline'
 ]
 
 for (ff, name, is_pkg) in pkgutil.iter_modules(['pipelines']):
