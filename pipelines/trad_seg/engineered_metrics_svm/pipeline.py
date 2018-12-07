@@ -78,6 +78,14 @@ class SVMPipeline(BasePipeline):
 
         # train the SVM model with the ground truth
         self.training_data_processed = pd.DataFrame(training_data_processed)
+
+        # drop the dark blue features
+        self.training_data_processed.drop(
+            list(self.training_data_processed.filter(regex='dark_blue')),
+            axis=1,
+            inplace=True
+        )
+
         self.pipe.fit(
             self.training_data_processed.drop('label', axis=1),
             self.training_data_processed['label']
@@ -241,6 +249,14 @@ class SVMPipeline(BasePipeline):
                 region_file_path=region_file_path
             )
             features_df = pd.DataFrame([features])
+
+            # drop the dark blue features
+            features_df.drop(
+                list(features_df.filter(regex='dark_blue')),
+                axis=1,
+                inplace=True
+            )
+
             probabilities = self.pipe.predict_proba(features_df.drop('label', axis=1))
             labelled_probs = {a: probabilities[0][i] for i, a in enumerate(model_classes)}
             pred_label = max(labelled_probs, key=lambda key: labelled_probs[key])

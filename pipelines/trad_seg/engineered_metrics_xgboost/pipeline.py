@@ -77,6 +77,14 @@ class XGBPipeline(BasePipeline):
 
         # train the SVM model with the ground truth
         self.training_data_processed = pd.DataFrame(training_data_processed)
+
+        # drop the dark blue features
+        self.training_data_processed.drop(
+            list(self.training_data_processed.filter(regex='dark_blue')),
+            axis=1,
+            inplace=True
+        )
+
         coded_labels = pd.Categorical(self.training_data_processed['label'])
         self.categories = coded_labels.categories
         self.param['num_class'] = len(self.categories)
@@ -243,6 +251,14 @@ class XGBPipeline(BasePipeline):
                 region_file_path=region_file_path
             )
             features_df = pd.DataFrame([features])
+
+            # drop the dark blue features
+            features_df.drop(
+                list(features_df.filter(regex='dark_blue')),
+                axis=1,
+                inplace=True
+            )
+
             d_test = xgb.DMatrix(features_df.drop('label', axis=1))
             probabilities = self.pipe.predict(d_test)
             labelled_probs = {a: probabilities[0][i] for i, a in enumerate(self.categories)}
