@@ -199,7 +199,7 @@ def generate_saturation_contours(
             edge_mask,
             filled_c_mask,
             max_dilate_percentage=max_dilate_percentage,
-            dilate_iterations=1
+            dilate_iterations=2
         )
 
         if not orig and signal > 0.7:
