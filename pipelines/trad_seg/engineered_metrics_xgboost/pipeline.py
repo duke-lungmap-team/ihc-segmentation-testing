@@ -7,6 +7,8 @@ from pipelines.base_pipeline import BasePipeline
 import xgboost as xgb
 from pipelines.trad_seg.utils import process_image, generate_color_contours, \
     generate_saturation_contours
+from sklearn.model_selection import train_test_split
+from sklearn import mixture
 
 # weird import style to un-confuse PyCharm
 try:
@@ -21,13 +23,21 @@ class XGBPipeline(BasePipeline):
 
         self.param = {
             'silent': 1,
-            'max_depth': 6,
-            'eta': 0.2,
-            'min_child_weight': 0.1,
-            'objective': 'multi:softprob'
+            'max_depth': 3,
+            'eta': 0.1,
+            'min_child_weight': 2,
+            'colsample_bytree': 0.15,
+            'colsample_bylevel': 0.15,
+            'objective': 'multi:softprob',
+            'subsample': 0.6,
+            'eval_metric': 'mlogloss'
         }
 
-        self.num_round = 100
+        self.margin_distance = None
+        self.inset_distance = None
+        self.subclass_bg = None
+
+        self.num_round = 40000
         self.pipe = None
         self.categories = None
 
@@ -37,6 +47,7 @@ class XGBPipeline(BasePipeline):
     def train(self):
         # process the training data to get custom metrics
         training_data_processed = []
+        bg_data_processed = []
 
         for img_name, img_data in self.training_data.items():
             if img_name == self.test_img_name:
@@ -49,7 +60,9 @@ class XGBPipeline(BasePipeline):
                     color_utils.generate_features(
                         hsv_img_as_numpy=img_data['hsv_img'],
                         polygon_points=region['points'],
-                        label=region['label']
+                        label=region['label'],
+                        outer_margin_distance=self.margin_distance,
+                        inset_center_distance=self.inset_distance
                     )
                 )
 
@@ -67,32 +80,60 @@ class XGBPipeline(BasePipeline):
             )
 
             for region in bg_contours:
-                training_data_processed.append(
+                bg_data_processed.append(
                     color_utils.generate_features(
                         hsv_img_as_numpy=img_data['hsv_img'],
                         polygon_points=region,
-                        label='background'
+                        label='background',
+                        outer_margin_distance=self.margin_distance,
+                        inset_center_distance=self.inset_distance
                     )
                 )
 
+        # separate background into self-similar groups
+        bg_df = pd.DataFrame(bg_data_processed)
+        if self.subclass_bg is not None:
+            bg_dpgmm = mixture.BayesianGaussianMixture(
+                n_components=2,
+                covariance_type='full'
+            )
+            bg_dpgmm.fit(bg_df.drop('label', axis=1))
+            bg_preds = bg_dpgmm.predict(bg_df.drop('label', axis=1))
+            for p in pd.unique(bg_preds):
+                bg_df.loc[bg_preds == p, 'label'] = 'background' + '_%d' % p
+
         # train the SVM model with the ground truth
         self.training_data_processed = pd.DataFrame(training_data_processed)
-
-        # drop the dark blue features
-        self.training_data_processed.drop(
-            list(self.training_data_processed.filter(regex='dark_blue')),
-            axis=1,
-            inplace=True
-        )
+        self.training_data_processed = pd.concat([bg_df, self.training_data_processed])
 
         coded_labels = pd.Categorical(self.training_data_processed['label'])
         self.categories = coded_labels.categories
         self.param['num_class'] = len(self.categories)
-        d_train = xgb.DMatrix(
+
+        x_train, x_eval, y_train, y_eval = train_test_split(
             self.training_data_processed.drop('label', axis=1),
-            label=coded_labels.codes
+            coded_labels.codes,
+            test_size=0.33,
+            random_state=123
         )
-        self.pipe = xgb.train(self.param, d_train, self.num_round)
+        d_train = xgb.DMatrix(
+            x_train,
+            label=y_train
+        )
+        d_eval = xgb.DMatrix(
+            x_eval,
+            label=y_eval
+        )
+
+        watchlist = [(d_train, 'train'), (d_eval, 'eval')]
+
+        self.pipe = xgb.train(
+            self.param,
+            d_train,
+            self.num_round,
+            evals=watchlist,
+            early_stopping_rounds=4000
+        )
 
     def test(self, saved_region_parent_dir=None):
         img_hsv = self.training_data[self.test_img_name]['hsv_img']
@@ -248,16 +289,11 @@ class XGBPipeline(BasePipeline):
             features = color_utils.generate_features(
                 img_hsv,
                 c,
-                region_file_path=region_file_path
+                region_file_path=region_file_path,
+                outer_margin_distance=self.margin_distance,
+                inset_center_distance=self.inset_distance
             )
             features_df = pd.DataFrame([features])
-
-            # drop the dark blue features
-            features_df.drop(
-                list(features_df.filter(regex='dark_blue')),
-                axis=1,
-                inplace=True
-            )
 
             d_test = xgb.DMatrix(features_df.drop('label', axis=1))
             probabilities = self.pipe.predict(d_test)
