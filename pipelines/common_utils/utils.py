@@ -39,7 +39,7 @@ def get_training_data_for_image_set(image_set_dir):
             'regions': []
         }
 
-        for label, regions in regions_dict.items():
+        for label, regions in regions_dict['regions'].items():
 
             for region in regions:
                 points = np.empty((0, 2), dtype='int')
