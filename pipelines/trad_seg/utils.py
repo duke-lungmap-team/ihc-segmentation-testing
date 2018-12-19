@@ -132,7 +132,6 @@ def generate_color_contours(img_hsv, edge_mask):
         _, contours, _ = cv2.findContours(
             single_cnt_mask,
             cv2.RETR_EXTERNAL,
-
             cv2.CHAIN_APPROX_SIMPLE
         )
 
