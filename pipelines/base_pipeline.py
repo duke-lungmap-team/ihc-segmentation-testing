@@ -145,9 +145,9 @@ class BasePipeline(object):
         # create separate set of images for each class label
         for class_label in sorted(self.report.keys()):
             # ground truth
-            if class_label != 'background':
+            if not class_label.startswith('background'):
                 new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
-                cv2.drawContours(new_img, gt_by_label_map[class_label], -1, (0, 255, 0), 5)
+                cv2.drawContours(new_img, gt_by_label_map[class_label], -1, (0, 255, 0), 7)
                 plt.figure(figsize=(8, 8))
                 plt.imshow(new_img)
                 title = "%s - %s - 01 - %s" % (pipeline_name, class_label, 'Ground Truth')
@@ -163,7 +163,7 @@ class BasePipeline(object):
 
             # true positive
             new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
-            cv2.drawContours(new_img, tp_by_label_map[class_label], -1, (0, 255, 0), 5)
+            cv2.drawContours(new_img, tp_by_label_map[class_label], -1, (0, 255, 0), 7)
             plt.figure(figsize=(8, 8))
             plt.imshow(new_img)
             title = "%s - %s - 02 - %s" % (pipeline_name, class_label, 'True Positive')
@@ -178,7 +178,7 @@ class BasePipeline(object):
 
             # false negative
             new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
-            cv2.drawContours(new_img, fn_by_label_map[class_label], -1, (0, 255, 0), 5)
+            cv2.drawContours(new_img, fn_by_label_map[class_label], -1, (0, 255, 0), 7)
             plt.figure(figsize=(8, 8))
             plt.imshow(new_img)
             title = "%s - %s - 03 - %s" % (pipeline_name, class_label, 'False Negative')
@@ -193,7 +193,7 @@ class BasePipeline(object):
 
             # false positive
             new_img = cv2.cvtColor(hsv_img.copy(), cv2.COLOR_HSV2RGB)
-            cv2.drawContours(new_img, fp_by_label_map[class_label], -1, (0, 255, 0), 5)
+            cv2.drawContours(new_img, fp_by_label_map[class_label], -1, (0, 255, 0), 7)
             plt.figure(figsize=(8, 8))
             plt.imshow(new_img)
             title = "%s - %s - 04 - %s" % (pipeline_name, class_label, 'False Positive')
